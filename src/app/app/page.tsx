@@ -1,46 +1,20 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { redirect } from "next/navigation";
+import { LogoutButton } from "@/components/logout-button";
+import { createClient } from "@/lib/supabase/server";
 
-export default function AppPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState<string | null>(null);
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
+export default async function AppPage() {
+  const supabase = await createClient();
 
-  useEffect(() => {
-    async function checkSession() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims ?? null;
 
-      if (!session) {
-        router.replace("/login");
-        return;
-      }
-
-      setEmail(session.user.email ?? null);
-      setIsCheckingSession(false);
-    }
-
-    checkSession();
-  }, [router]);
-
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    router.replace("/login");
-    router.refresh();
+  if (!claims) {
+    redirect("/login");
   }
 
-  if (isCheckingSession) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-slate-950 text-slate-300">
-        Verificando acesso privado...
-      </main>
-    );
-  }
+  const email =
+    typeof claims.email === "string" ? claims.email : "usuário autenticado";
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100 sm:px-10">
@@ -56,27 +30,21 @@ export default function AppPage() {
             </div>
           </Link>
 
-          <button
-            onClick={handleLogout}
-            className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-rose-300/50 hover:text-rose-200"
-          >
-            Sair
-          </button>
+          <LogoutButton />
         </header>
 
         <section className="mt-16 rounded-3xl border border-cyan-300/20 bg-gradient-to-br from-cyan-300/10 via-slate-900 to-violet-500/10 p-8 sm:p-12">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">
             Acesso confirmado
           </p>
+
           <h1 className="mt-4 text-4xl font-black tracking-tight">
             O MixBrain está conectado ao seu ambiente privado.
           </h1>
+
           <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-            {email
-              ? `Sessão ativa para ${email}. `
-              : ""}
-            A próxima etapa criará o modelo de dados seguro para projetos, tracks
-            e versões de set.
+            Sessão autenticada para {email}. A próxima etapa conectará esta
+            área aos seus projetos, tracks e versões de set.
           </p>
         </section>
       </div>
