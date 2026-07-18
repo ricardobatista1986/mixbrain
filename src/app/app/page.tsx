@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/logout-button";
+import { CreateProjectForm } from "@/components/create-project-form";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AppPage() {
   const supabase = await createClient();
 
-  const { data } = await supabase.auth.getClaims();
-  const claims = data?.claims ?? null;
+  const { data: authData } = await supabase.auth.getClaims();
+  const claims = authData?.claims ?? null;
 
   if (!claims) {
     redirect("/login");
@@ -16,9 +17,18 @@ export default async function AppPage() {
   const email =
     typeof claims.email === "string" ? claims.email : "usuário autenticado";
 
+  const { data: projects, error } = await supabase
+    .from("set_projects")
+    .select("id, name, description, target_duration_minutes, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100 sm:px-10">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-6xl">
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
           <Link href="/" className="flex items-center gap-3">
             <div className="grid h-10 w-10 place-items-center rounded-xl bg-cyan-300 font-black text-slate-950">
@@ -30,23 +40,83 @@ export default async function AppPage() {
             </div>
           </Link>
 
-          <LogoutButton />
+          <div className="flex items-center gap-3">
+            <p className="hidden text-sm text-slate-500 sm:block">{email}</p>
+            <LogoutButton />
+          </div>
         </header>
 
-        <section className="mt-16 rounded-3xl border border-cyan-300/20 bg-gradient-to-br from-cyan-300/10 via-slate-900 to-violet-500/10 p-8 sm:p-12">
+        <section className="mt-10 rounded-3xl border border-cyan-300/20 bg-gradient-to-br from-cyan-300/10 via-slate-900 to-violet-500/10 p-8 sm:p-12">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">
-            Acesso confirmado
+            Projetos de set
           </p>
 
           <h1 className="mt-4 text-4xl font-black tracking-tight">
-            O MixBrain está conectado ao seu ambiente privado.
+            Seu workspace agora conversa com o banco real.
           </h1>
 
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-            Sessão autenticada para {email}. A próxima etapa conectará esta
-            área aos seus projetos, tracks e versões de set.
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-300">
+            Crie projetos, organize a intenção narrativa de cada set e use esta
+            base como ponto de partida para biblioteca, candidatas, blocos e
+            versões.
           </p>
         </section>
+
+        <div className="mt-10 grid gap-8 xl:grid-cols-[1.1fr_0.9fr]">
+          <CreateProjectForm />
+
+          <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-cyan-950/20">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-300">
+                  Projetos salvos
+                </p>
+                <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-50">
+                  Seus projetos
+                </h2>
+              </div>
+
+              <div className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-400">
+                {projects?.length ?? 0} projeto(s)
+              </div>
+            </div>
+
+            {projects && projects.length > 0 ? (
+              <div className="mt-8 space-y-4">
+                {projects.map((project) => (
+                  <article
+                    key={project.id}
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 p-5"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-bold tracking-tight text-slate-100">
+                          {project.name}
+                        </h3>
+                        <p className="mt-2 text-sm leading-6 text-slate-400">
+                          {project.description?.trim()
+                            ? project.description
+                            : "Sem descrição ainda."}
+                        </p>
+                      </div>
+
+                      <div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                        {project.target_duration_minutes
+                          ? `${project.target_duration_minutes} min`
+                          : "Sem duração"}
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-8 rounded-2xl border border-dashed border-white/10 bg-slate-950/50 p-6 text-sm leading-7 text-slate-400">
+                Nenhum projeto criado ainda. Use o formulário ao lado para criar
+                o primeiro projeto do MixBrain.
+              </div>
+            )}
+          </section>
+        </div>
       </div>
     </main>
   );
