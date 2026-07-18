@@ -1,3 +1,4 @@
+import Link from "next/link";
 const modules = [
   {
     number: "01",
@@ -61,9 +62,12 @@ export default function Home() {
               </div>
             </div>
 
-            <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-medium text-cyan-200">
-              Fundação v0.1
-            </span>
+            <Link
+              href="/glossario"
+              className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-medium text-cyan-200 transition hover:bg-cyan-300/20"
+            >
+              Glossário
+            </Link>
           </nav>
 
           <div className="grid gap-12 py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
