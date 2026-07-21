@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { LogoutButton } from "@/components/logout-button";
 import { createClient } from "@/lib/supabase/server";
+import { EditProjectForm } from "@/components/edit-project-form";
 
 type ProjectPageProps = {
   params: Promise<{ id: string }>;
@@ -138,47 +139,51 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           </article>
         </section>
 
-        <section className="mt-10 grid gap-6 lg:grid-cols-3">
-          <article className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
-              01
-            </p>
-            <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-100">
-              Direção narrativa
-            </h2>
-            <p className="mt-3 leading-7 text-slate-400">
-              {project.narrative_brief?.trim()
-                ? project.narrative_brief
-                : "Ainda não definida. A próxima evolução permitirá registrar o arco, energia, momentos e intenção do set."}
-            </p>
-          </article>
+        <div className="mt-10 grid gap-8 xl:grid-cols-[1.15fr_0.85fr]">
+            <EditProjectForm project={project} />
 
-          <article className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
-              02
-            </p>
-            <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-100">
-              Candidatas
-            </h2>
-            <p className="mt-3 leading-7 text-slate-400">
-              Nenhuma track adicionada ainda. Esta área receberá a seleção de
-              candidatas da sua biblioteca.
-            </p>
-          </article>
+            <div className="space-y-6">
+                <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
+                    01
+                </p>
+                <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-100">
+                    Direção narrativa
+                </h2>
+                <p className="mt-3 leading-7 text-slate-400">
+                    {project.narrative_brief?.trim()
+                    ? project.narrative_brief
+                    : "Ainda não definida. Use o formulário ao lado para registrar o arco, energia, momentos e intenção do set."}
+                </p>
+                </section>
 
-          <article className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
-              03
-            </p>
-            <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-100">
-              Versões e blocos
-            </h2>
-            <p className="mt-3 leading-7 text-slate-400">
-              Salve versões de set e preserve trechos de sequência já aprovados
-              como blocos congelados.
-            </p>
-          </article>
-        </section>
+                <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
+                    02
+                </p>
+                <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-100">
+                    Candidatas
+                </h2>
+                <p className="mt-3 leading-7 text-slate-400">
+                    Nenhuma track adicionada ainda. Esta área receberá a seleção de
+                    candidatas da sua biblioteca.
+                </p>
+                </section>
+
+                <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
+                    03
+                </p>
+                <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-100">
+                    Versões e blocos
+                </h2>
+                <p className="mt-3 leading-7 text-slate-400">
+                    Salve versões de set e preserve trechos de sequência já aprovados
+                    como blocos congelados.
+                </p>
+                </section>
+            </div>
+        </div>
       </div>
     </main>
   );
