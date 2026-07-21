@@ -84,9 +84,10 @@ export default async function AppPage() {
             {projects && projects.length > 0 ? (
               <div className="mt-8 space-y-4">
                 {projects.map((project) => (
-                  <article
+                  <Link
                     key={project.id}
-                    className="rounded-2xl border border-white/10 bg-slate-950/70 p-5"
+                    href={`/app/projetos/${project.id}`}
+                    className="block rounded-2xl border border-white/10 bg-slate-950/70 p-5 transition hover:-translate-y-0.5 hover:border-cyan-300/40 hover:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -106,7 +107,11 @@ export default async function AppPage() {
                           : "Sem duração"}
                       </div>
                     </div>
-                  </article>
+
+                    <p className="mt-5 text-sm font-semibold text-cyan-200">
+                      Abrir projeto <span aria-hidden="true">→</span>
+                    </p>
+                  </Link>
                 ))}
               </div>
             ) : (
