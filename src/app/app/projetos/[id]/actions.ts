@@ -85,3 +85,41 @@ export async function updateSetProject(projectId: string, formData: FormData) {
   revalidatePath("/app");
   revalidatePath(`/app/projetos/${projectId}`);
 }
+
+export async function addCandidate(projectId: string, formData: FormData) {
+  const supabase = await createClient();
+
+  const { data: authData } = await supabase.auth.getClaims();
+  const claims = authData?.claims ?? null;
+
+  if (!claims || typeof claims.sub !== "string") {
+    throw new Error("Usuário não autenticado.");
+  }
+
+  const rawTrackId = formData.get("trackId");
+  const rawNotes = formData.get("notes");
+
+  const trackId = typeof rawTrackId === "string" ? rawTrackId.trim() : "";
+  const notes = typeof rawNotes === "string" ? rawNotes.trim() : "";
+
+  if (!trackId) {
+    throw new Error("Selecione uma track.");
+  }
+
+  const { error } = await supabase.from("set_candidates").insert({
+    project_id: projectId,
+    track_id: trackId,
+    user_id: claims.sub,
+    status: "candidate",
+    notes: notes || null,
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("Esta track já foi adicionada como candidata.");
+    }
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/app/projetos/${projectId}`);
+}
