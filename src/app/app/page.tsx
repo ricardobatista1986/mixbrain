@@ -14,8 +14,6 @@ export default async function AppPage() {
     redirect("/login");
   }
 
-  const email =
-    typeof claims.email === "string" ? claims.email : "usuário autenticado";
 
   const { data: projects, error } = await supabase
     .from("set_projects")
@@ -41,7 +39,12 @@ export default async function AppPage() {
           </Link>
 
           <div className="flex items-center gap-3">
-            <p className="hidden text-sm text-slate-500 sm:block">{email}</p>
+            <Link
+              href="/app/tracks"
+              className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
+            >
+              Biblioteca
+            </Link>
             <LogoutButton />
           </div>
         </header>
