@@ -45,6 +45,12 @@ export default async function AppPage() {
             >
               Biblioteca
             </Link>
+            <Link
+              href="/app/glossario"
+              className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
+            >
+              Glossário
+            </Link>
             <LogoutButton />
           </div>
         </header>
