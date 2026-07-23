@@ -3,9 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
-// ==========================================
-// FUNÇÃO AUXILIAR NOVA
-// ==========================================
 async function requireUserAndProject(projectId: string) {
   const supabase = await createClient();
 
@@ -32,133 +29,63 @@ async function requireUserAndProject(projectId: string) {
   return { supabase, userId, project };
 }
 
-// ==========================================
-// SUAS FUNÇÕES QUE JÁ EXISTIAM
-// ==========================================
+// Helper seguro para reordenar múltiplos itens sem violar restrições do banco
+async function applyNewOrder(supabase: any, projectId: string, newOrderArray: any[]) {
+  // Passo 1: joga todas as posições para negativo (evita conflito de posição única)
+  for (const item of newOrderArray) {
+    await supabase.from("set_tracklist_items").update({ position: -item.newPosition }).eq("id", item.id);
+  }
+  // Passo 2: consolida a posição correta positiva
+  for (const item of newOrderArray) {
+    await supabase.from("set_tracklist_items").update({ position: item.newPosition }).eq("id", item.id);
+  }
+}
+
 export async function updateSetProject(projectId: string, formData: FormData) {
   const supabase = await createClient();
-
   const { data: authData } = await supabase.auth.getClaims();
-  const claims = authData?.claims ?? null;
-
-  if (!claims) {
-    throw new Error("Usuário não autenticado.");
-  }
+  if (!authData?.claims) throw new Error("Usuário não autenticado.");
 
   const rawName = formData.get("name");
   const rawDescription = formData.get("description");
-  const rawTargetDuration = formData.get("targetDurationMinutes");
-  const rawBpmMin = formData.get("bpmMin");
-  const rawBpmMax = formData.get("bpmMax");
-  const rawNarrativeBrief = formData.get("narrativeBrief");
-
   const name = typeof rawName === "string" ? rawName.trim() : "";
-  const description =
-    typeof rawDescription === "string" ? rawDescription.trim() : "";
-  const narrativeBrief =
-    typeof rawNarrativeBrief === "string" ? rawNarrativeBrief.trim() : "";
+  const description = typeof rawDescription === "string" ? rawDescription.trim() : "";
 
-  const targetDurationMinutes =
-    typeof rawTargetDuration === "string" && rawTargetDuration.trim() !== ""
-      ? Number(rawTargetDuration)
-      : null;
-
-  const bpmMin =
-    typeof rawBpmMin === "string" && rawBpmMin.trim() !== ""
-      ? Number(rawBpmMin)
-      : null;
-
-  const bpmMax =
-    typeof rawBpmMax === "string" && rawBpmMax.trim() !== ""
-      ? Number(rawBpmMax)
-      : null;
-
-  if (!name) {
-    throw new Error("O nome do projeto é obrigatório.");
-  }
-
-  if (
-    targetDurationMinutes !== null &&
-    (!Number.isFinite(targetDurationMinutes) || targetDurationMinutes <= 0)
-  ) {
-    throw new Error("A duração alvo deve ser um número positivo.");
-  }
-
-  if (bpmMin !== null && (!Number.isFinite(bpmMin) || bpmMin < 40 || bpmMin > 250)) {
-    throw new Error("O BPM mínimo deve estar entre 40 e 250.");
-  }
-
-  if (bpmMax !== null && (!Number.isFinite(bpmMax) || bpmMax < 40 || bpmMax > 250)) {
-    throw new Error("O BPM máximo deve estar entre 40 e 250.");
-  }
-
-  if (bpmMin !== null && bpmMax !== null && bpmMin > bpmMax) {
-    throw new Error("O BPM mínimo não pode ser maior que o BPM máximo.");
-  }
+  if (!name) throw new Error("O nome é obrigatório.");
 
   const { error } = await supabase
     .from("set_projects")
-    .update({
-      name,
-      description: description || null,
-      target_duration_minutes: targetDurationMinutes,
-      bpm_min: bpmMin,
-      bpm_max: bpmMax,
-      narrative_brief: narrativeBrief || null,
-    })
-    .eq("id", projectId)
-    .select()
-    .single();
+    .update({ name, description: description || null })
+    .eq("id", projectId);
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 
   revalidatePath("/app");
-  revalidatePath(`/app/projects/${projectId}`);
+  revalidatePath(`/app/projetos/${projectId}`);
 }
 
 export async function addCandidate(projectId: string, formData: FormData) {
   const supabase = await createClient();
-
   const { data: authData } = await supabase.auth.getClaims();
-  const claims = authData?.claims ?? null;
+  if (!authData?.claims?.sub) throw new Error("Não autenticado.");
 
-  if (!claims || typeof claims.sub !== "string") {
-    throw new Error("Usuário não autenticado.");
-  }
+  const trackId = String(formData.get("trackId") || "").trim();
+  const notes = String(formData.get("notes") || "").trim();
 
-  const rawTrackId = formData.get("trackId");
-  const rawNotes = formData.get("notes");
-
-  const trackId = typeof rawTrackId === "string" ? rawTrackId.trim() : "";
-  const notes = typeof rawNotes === "string" ? rawNotes.trim() : "";
-
-  if (!trackId) {
-    throw new Error("Selecione uma track.");
-  }
+  if (!trackId) throw new Error("Selecione uma track.");
 
   const { error } = await supabase.from("set_candidates").insert({
     project_id: projectId,
     track_id: trackId,
-    user_id: claims.sub,
+    user_id: authData.claims.sub,
     status: "candidate",
     notes: notes || null,
   });
 
-  if (error) {
-    if (error.code === "23505") {
-      throw new Error("Esta track já foi adicionada como candidata.");
-    }
-    throw new Error(error.message);
-  }
-
-  revalidatePath(`/app/projects/${projectId}`);
+  if (error && error.code !== "23505") throw new Error(error.message);
+  revalidatePath(`/app/projetos/${projectId}`);
 }
 
-// ==========================================
-// NOVAS FUNÇÕES DA TRACKLIST
-// ==========================================
 export async function approveCandidateToTracklist(formData: FormData) {
   const projectId = String(formData.get("project_id") || "");
   const trackId = String(formData.get("track_id") || "");
@@ -183,18 +110,13 @@ export async function approveCandidateToTracklist(formData: FormData) {
 
     const nextPosition = lastItem ? lastItem.position + 1 : 1;
 
-    const { error } = await supabase.from("set_tracklist_items").insert({
+    await supabase.from("set_tracklist_items").insert({
       project_id: projectId,
       track_id: trackId,
       position: nextPosition,
     });
-
-    if (error) {
-      throw new Error(error.message);
-    }
   }
-
-  revalidatePath(`/app/projects/${projectId}`);
+  revalidatePath(`/app/projetos/${projectId}`);
 }
 
 export async function removeFromTracklist(formData: FormData) {
@@ -203,26 +125,15 @@ export async function removeFromTracklist(formData: FormData) {
 
   const { supabase } = await requireUserAndProject(projectId);
 
-  const { data: item, error: itemError } = await supabase
+  const { data: item } = await supabase
     .from("set_tracklist_items")
     .select("id, position")
     .eq("id", tracklistItemId)
-    .eq("project_id", projectId)
     .single();
 
-  if (itemError || !item) {
-    throw new Error("Item da tracklist não encontrado.");
-  }
+  if (!item) return;
 
-  const { error: deleteError } = await supabase
-    .from("set_tracklist_items")
-    .delete()
-    .eq("id", tracklistItemId)
-    .eq("project_id", projectId);
-
-  if (deleteError) {
-    throw new Error(deleteError.message);
-  }
+  await supabase.from("set_tracklist_items").delete().eq("id", tracklistItemId);
 
   const { data: itemsAfter } = await supabase
     .from("set_tracklist_items")
@@ -231,146 +142,146 @@ export async function removeFromTracklist(formData: FormData) {
     .gt("position", item.position)
     .order("position", { ascending: true });
 
-  if (itemsAfter && itemsAfter.length > 0) {
+  if (itemsAfter) {
     for (const row of itemsAfter) {
-      const { error } = await supabase
-        .from("set_tracklist_items")
-        .update({ position: row.position - 1 })
-        .eq("id", row.id);
+      await supabase.from("set_tracklist_items").update({ position: row.position - 1 }).eq("id", row.id);
+    }
+  }
+  revalidatePath(`/app/projetos/${projectId}`);
+}
 
-      if (error) {
-        throw new Error(error.message);
-      }
+export async function createFrozenBlock(formData: FormData) {
+  const projectId = String(formData.get("project_id") || "");
+  const blockName = String(formData.get("block_name") || "Novo Bloco");
+  const selectedItemIds = formData.getAll("selected_items").map(String);
+
+  if (selectedItemIds.length < 2) {
+    throw new Error("Selecione pelo menos 2 tracks para formar um bloco.");
+  }
+
+  const { supabase } = await requireUserAndProject(projectId);
+
+  const { data: items } = await supabase
+    .from("set_tracklist_items")
+    .select("id, position, block_id")
+    .in("id", selectedItemIds)
+    .eq("project_id", projectId)
+    .order("position", { ascending: true });
+
+  if (!items || items.length !== selectedItemIds.length) throw new Error("Erro ao validar tracks.");
+  
+  if (items.some((i) => i.block_id)) throw new Error("Alguma track já pertence a um bloco.");
+
+  for (let i = 1; i < items.length; i++) {
+    if (items[i].position !== items[i - 1].position + 1) {
+      throw new Error("As tracks selecionadas precisam estar em sequência exata na lista.");
     }
   }
 
-  revalidatePath(`/app/projects/${projectId}`);
+  const { data: block } = await supabase
+    .from("set_blocks")
+    .insert({ project_id: projectId, name: blockName })
+    .select("id")
+    .single();
+
+  if (block) {
+    await supabase.from("set_tracklist_items").update({ block_id: block.id }).in("id", selectedItemIds);
+  }
+  revalidatePath(`/app/projetos/${projectId}`);
 }
 
-export async function moveTracklistItemUp(formData: FormData) {
+export async function dissolveFrozenBlock(formData: FormData) {
   const projectId = String(formData.get("project_id") || "");
-  const tracklistItemId = String(formData.get("tracklist_item_id") || "");
+  const blockId = String(formData.get("block_id") || "");
+  const { supabase } = await requireUserAndProject(projectId);
+
+  await supabase.from("set_tracklist_items").update({ block_id: null }).eq("block_id", blockId);
+  await supabase.from("set_blocks").delete().eq("id", blockId);
+  revalidatePath(`/app/projetos/${projectId}`);
+}
+
+export async function moveEntityUp(formData: FormData) {
+  const projectId = String(formData.get("project_id") || "");
+  const entityId = String(formData.get("entity_id") || "");
+  const isBlock = formData.get("is_block") === "true";
 
   const { supabase } = await requireUserAndProject(projectId);
 
-  const { data: current, error: currentError } = await supabase
+  const { data: allItems } = await supabase
     .from("set_tracklist_items")
-    .select("id, position")
-    .eq("id", tracklistItemId)
+    .select("*")
     .eq("project_id", projectId)
-    .single();
+    .order("position", { ascending: true });
 
-  if (currentError || !current) {
-    throw new Error("Item da tracklist não encontrado.");
+  if (!allItems) return;
+
+  const aStartIndex = isBlock ? allItems.findIndex((i) => i.block_id === entityId) : allItems.findIndex((i) => i.id === entityId);
+  const aLength = isBlock ? allItems.filter((i) => i.block_id === entityId).length : 1;
+
+  if (aStartIndex <= 0) return; // Já está no topo
+
+  const bEndIndex = aStartIndex - 1;
+  let bStartIndex = bEndIndex;
+  const bBlockId = allItems[bEndIndex].block_id;
+
+  if (bBlockId) {
+    while (bStartIndex > 0 && allItems[bStartIndex - 1].block_id === bBlockId) {
+      bStartIndex--;
+    }
   }
+  const bLength = bEndIndex - bStartIndex + 1;
 
-  if (current.position <= 1) {
-    revalidatePath(`/app/projects/${projectId}`);
-    return;
-  }
+  const arrayBefore = allItems.slice(0, bStartIndex);
+  const arrayB = allItems.slice(bStartIndex, bStartIndex + bLength);
+  const arrayA = allItems.slice(aStartIndex, aStartIndex + aLength);
+  const arrayAfter = allItems.slice(aStartIndex + aLength);
 
-  const targetPosition = current.position - 1;
+  const newArray = [...arrayBefore, ...arrayA, ...arrayB, ...arrayAfter];
+  const updates = newArray.map((item, index) => ({ id: item.id, newPosition: index + 1 }));
 
-  const { data: previous, error: previousError } = await supabase
-    .from("set_tracklist_items")
-    .select("id, position")
-    .eq("project_id", projectId)
-    .eq("position", targetPosition)
-    .single();
-
-  if (previousError || !previous) {
-    throw new Error("Item anterior não encontrado.");
-  }
-
-  const { error: firstUpdateError } = await supabase
-    .from("set_tracklist_items")
-    .update({ position: 0 })
-    .eq("id", previous.id);
-
-  if (firstUpdateError) {
-    throw new Error(firstUpdateError.message);
-  }
-
-  const { error: secondUpdateError } = await supabase
-    .from("set_tracklist_items")
-    .update({ position: targetPosition })
-    .eq("id", current.id);
-
-  if (secondUpdateError) {
-    throw new Error(secondUpdateError.message);
-  }
-
-  const { error: thirdUpdateError } = await supabase
-    .from("set_tracklist_items")
-    .update({ position: current.position })
-    .eq("id", previous.id);
-
-  if (thirdUpdateError) {
-    throw new Error(thirdUpdateError.message);
-  }
-
-  revalidatePath(`/app/projects/${projectId}`);
+  await applyNewOrder(supabase, projectId, updates);
+  revalidatePath(`/app/projetos/${projectId}`);
 }
 
-export async function moveTracklistItemDown(formData: FormData) {
+export async function moveEntityDown(formData: FormData) {
   const projectId = String(formData.get("project_id") || "");
-  const tracklistItemId = String(formData.get("tracklist_item_id") || "");
+  const entityId = String(formData.get("entity_id") || "");
+  const isBlock = formData.get("is_block") === "true";
 
   const { supabase } = await requireUserAndProject(projectId);
 
-  const { data: current, error: currentError } = await supabase
+  const { data: allItems } = await supabase
     .from("set_tracklist_items")
-    .select("id, position")
-    .eq("id", tracklistItemId)
+    .select("*")
     .eq("project_id", projectId)
-    .single();
+    .order("position", { ascending: true });
 
-  if (currentError || !current) {
-    throw new Error("Item da tracklist não encontrado.");
+  if (!allItems) return;
+
+  const aStartIndex = isBlock ? allItems.findIndex((i) => i.block_id === entityId) : allItems.findIndex((i) => i.id === entityId);
+  const aLength = isBlock ? allItems.filter((i) => i.block_id === entityId).length : 1;
+
+  if (aStartIndex === -1 || aStartIndex + aLength >= allItems.length) return; // Já está no fim
+
+  const bStartIndex = aStartIndex + aLength;
+  let bEndIndex = bStartIndex;
+  const bBlockId = allItems[bStartIndex].block_id;
+
+  if (bBlockId) {
+    while (bEndIndex < allItems.length - 1 && allItems[bEndIndex + 1].block_id === bBlockId) {
+      bEndIndex++;
+    }
   }
+  const bLength = bEndIndex - bStartIndex + 1;
 
-  const { data: next, error: nextError } = await supabase
-    .from("set_tracklist_items")
-    .select("id, position")
-    .eq("project_id", projectId)
-    .eq("position", current.position + 1)
-    .maybeSingle();
+  const arrayBefore = allItems.slice(0, aStartIndex);
+  const arrayA = allItems.slice(aStartIndex, aStartIndex + aLength);
+  const arrayB = allItems.slice(bStartIndex, bStartIndex + bLength);
+  const arrayAfter = allItems.slice(bStartIndex + bLength);
 
-  if (nextError) {
-    throw new Error(nextError.message);
-  }
+  const newArray = [...arrayBefore, ...arrayB, ...arrayA, ...arrayAfter];
+  const updates = newArray.map((item, index) => ({ id: item.id, newPosition: index + 1 }));
 
-  if (!next) {
-    revalidatePath(`/app/projects/${projectId}`);
-    return;
-  }
-
-  const { error: firstUpdateError } = await supabase
-    .from("set_tracklist_items")
-    .update({ position: 0 })
-    .eq("id", next.id);
-
-  if (firstUpdateError) {
-    throw new Error(firstUpdateError.message);
-  }
-
-  const { error: secondUpdateError } = await supabase
-    .from("set_tracklist_items")
-    .update({ position: current.position + 1 })
-    .eq("id", current.id);
-
-  if (secondUpdateError) {
-    throw new Error(secondUpdateError.message);
-  }
-
-  const { error: thirdUpdateError } = await supabase
-    .from("set_tracklist_items")
-    .update({ position: current.position })
-    .eq("id", next.id);
-
-  if (thirdUpdateError) {
-    throw new Error(thirdUpdateError.message);
-  }
-
-  revalidatePath(`/app/projects/${projectId}`);
+  await applyNewOrder(supabase, projectId, updates);
+  revalidatePath(`/app/projetos/${projectId}`);
 }
