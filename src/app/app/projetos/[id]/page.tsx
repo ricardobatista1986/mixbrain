@@ -11,6 +11,11 @@ import {
   moveEntityUp,
   removeFromTracklist,
 } from "./actions";
+import {
+  calculateTransitionScore,
+  type ScoreTrack,
+  type TransitionScore,
+} from "@/lib/mixbrain/transition-score";
 
 type ProjectPageProps = {
   params: Promise<{ id: string }>;
@@ -53,186 +58,137 @@ type GroupedSingle = {
 
 type GroupedItem = GroupedBlock | GroupedSingle;
 
-type CamelotParsed = {
-  number: number;
-  letter: "A" | "B";
-};
+function getTrackFromRelation(
+  relation: ScoreTrack | ScoreTrack[] | null | undefined
+): ScoreTrack | null {
+  if (Array.isArray(relation)) {
+    return relation[0] ?? null;
+  }
 
-function parseCamelot(value: string | null | undefined): CamelotParsed | null {
-  if (!value) return null;
-  const normalized = value.trim().toUpperCase();
-  const match = normalized.match(/^([1-9]|1[0-2])(A|B)$/);
+  return relation ?? null;
+}
 
-  if (!match) return null;
-
-  return {
-    number: Number(match[1]),
-    letter: match[2] as "A" | "B",
+function getScoreToneClasses(score: TransitionScore) {
+  const tones = {
+    emerald: "border-emerald-300/30 bg-emerald-300/10 text-emerald-100",
+    cyan: "border-cyan-300/30 bg-cyan-300/10 text-cyan-100",
+    amber: "border-amber-300/30 bg-amber-300/10 text-amber-100",
+    rose: "border-rose-300/30 bg-rose-300/10 text-rose-100",
+    slate: "border-white/10 bg-white/[0.03] text-slate-200",
   };
+
+  return tones[score.tone];
 }
 
-function camelotDistance(a: number, b: number) {
-  const diff = Math.abs(a - b);
-  return Math.min(diff, 12 - diff);
+function getFactorStatusLabel(status: "available" | "missing" | "pending") {
+  if (status === "available") {
+    return "Calculado";
+  }
+
+  if (status === "missing") {
+    return "Dado ausente";
+  }
+
+  return "Aguardando contexto";
 }
 
-function getKeyScore(
-  currentKey: string | null | undefined,
-  nextKey: string | null | undefined
-) {
-  const a = parseCamelot(currentKey);
-  const b = parseCamelot(nextKey);
-
-  if (!a || !b) {
-    return {
-      score: 50,
-      label: "Key indefinida",
-      tone: "text-slate-400 border-white/10 bg-white/[0.03]",
-    };
-  }
-
-  if (a.number === b.number && a.letter === b.letter) {
-    return {
-      score: 100,
-      label: "Mesma key",
-      tone: "text-emerald-200 border-emerald-300/30 bg-emerald-300/10",
-    };
-  }
-
-  if (a.number === b.number && a.letter !== b.letter) {
-    return {
-      score: 92,
-      label: "Relativa maior/menor",
-      tone: "text-emerald-200 border-emerald-300/30 bg-emerald-300/10",
-    };
-  }
-
-  const distance = camelotDistance(a.number, b.number);
-
-  if (distance === 1 && a.letter === b.letter) {
-    return {
-      score: 88,
-      label: "Vizinha harmônica",
-      tone: "text-cyan-200 border-cyan-300/30 bg-cyan-300/10",
-    };
-  }
-
-  if (distance === 2 && a.letter === b.letter) {
-    return {
-      score: 72,
-      label: "Energy boost",
-      tone: "text-amber-200 border-amber-300/30 bg-amber-300/10",
-    };
-  }
-
-  return {
-    score: 35,
-    label: "Relação distante",
-    tone: "text-rose-200 border-rose-300/30 bg-rose-300/10",
-  };
-}
-
-function getBpmScore(
-  currentBpm: number | null | undefined,
-  nextBpm: number | null | undefined
-) {
-  if (
-    currentBpm === null ||
-    currentBpm === undefined ||
-    nextBpm === null ||
-    nextBpm === undefined
-  ) {
-    return {
-      score: 50,
-      label: "BPM indefinido",
-    };
-  }
-
-  const diff = Math.abs(currentBpm - nextBpm);
-
-  if (diff === 0) return { score: 100, label: "Mesmo BPM" };
-  if (diff <= 1) return { score: 92, label: "Quase igual" };
-  if (diff <= 2) return { score: 84, label: "Muito próximo" };
-  if (diff <= 4) return { score: 70, label: "Aceitável" };
-  if (diff <= 6) return { score: 55, label: "Mudança perceptível" };
-
-  return { score: 30, label: "Salto grande" };
-}
-
-function getEnergyScore(
-  currentEnergy: number | null | undefined,
-  nextEnergy: number | null | undefined
-) {
-  if (
-    currentEnergy === null ||
-    currentEnergy === undefined ||
-    nextEnergy === null ||
-    nextEnergy === undefined
-  ) {
-    return {
-      score: 50,
-      label: "Energia indefinida",
-    };
-  }
-
-  const diff = Math.abs(currentEnergy - nextEnergy);
-
-  if (diff === 0) return { score: 100, label: "Mesmo nível" };
-  if (diff <= 1) return { score: 90, label: "Muito próxima" };
-  if (diff <= 2) return { score: 75, label: "Próxima" };
-  if (diff <= 3) return { score: 58, label: "Mudança perceptível" };
-
-  return { score: 35, label: "Mudança forte" };
-}
-
-function getTransitionCompatibility(
-  currentTrack: Track | null | undefined,
-  nextTrack: Track | null | undefined
-) {
-  if (!nextTrack) {
+function TransitionScoreCard({
+  score,
+}: {
+  score: TransitionScore | null;
+}) {
+  if (!score) {
     return null;
   }
 
-  const bpm = getBpmScore(currentTrack?.bpm, nextTrack?.bpm);
-  const key = getKeyScore(currentTrack?.musical_key, nextTrack?.musical_key);
-  const energy = getEnergyScore(currentTrack?.energy, nextTrack?.energy);
+  return (
+    <details
+      className={`rounded-xl border p-3 ${getScoreToneClasses(score)}`}
+    >
+      <summary className="cursor-pointer list-none">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-black">
+              Score MixBrain:{" "}
+              {score.finalScore === null ? "—" : `${score.finalScore}%`}
+            </p>
+            <p className="mt-1 text-xs opacity-80">
+              Para a transição até a próxima track.
+            </p>
+          </div>
 
-  const finalScore = Math.round(
-    bpm.score * 0.3 + key.score * 0.45 + energy.score * 0.25
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-current/20 px-3 py-1 text-xs font-bold">
+              {score.label}
+            </span>
+            <span className="rounded-full border border-current/20 px-3 py-1 text-xs">
+              Confiança: {score.confidence}%
+            </span>
+            <span className="text-xs font-bold">Ver fatores</span>
+          </div>
+        </div>
+      </summary>
+
+      <div className="mt-4 border-t border-current/20 pt-4">
+        <p className="text-xs leading-5 opacity-80">
+          O score usa somente fatores com dados disponíveis. Narrativa e momento
+          ainda aguardam marcação curatorial do projeto.
+        </p>
+
+        <div className="mt-4 space-y-2">
+          {score.factors.map((factor) => (
+            <div
+              key={factor.id}
+              className="rounded-lg border border-current/15 bg-slate-950/20 p-3"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold">{factor.title}</span>
+                  <span className="rounded-full border border-current/20 px-2 py-0.5 text-[11px] font-medium">
+                    Peso oficial: {factor.officialWeight}%
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="rounded-full border border-current/20 px-2 py-0.5">
+                    {getFactorStatusLabel(factor.status)}
+                  </span>
+                  {factor.score !== null ? (
+                    <span className="font-black">{factor.score}%</span>
+                  ) : null}
+                </div>
+              </div>
+
+              <p className="mt-2 text-xs leading-5 opacity-85">
+                {factor.explanation}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <Link
+          href="/app/glossario"
+          className="mt-4 inline-flex text-xs font-bold underline underline-offset-4 transition hover:opacity-75"
+        >
+          Entender pesos e regras no glossário
+        </Link>
+      </div>
+    </details>
   );
-
-  let label = "Fraca";
-  let tone = "text-rose-200 border-rose-300/30 bg-rose-300/10";
-
-  if (finalScore >= 85) {
-    label = "Excelente";
-    tone = "text-emerald-200 border-emerald-300/30 bg-emerald-300/10";
-  } else if (finalScore >= 70) {
-    label = "Boa";
-    tone = "text-cyan-200 border-cyan-300/30 bg-cyan-300/10";
-  } else if (finalScore >= 55) {
-    label = "Média";
-    tone = "text-amber-200 border-amber-300/30 bg-amber-300/10";
-  }
-
-  return {
-    finalScore,
-    label,
-    tone,
-    reasons: {
-      bpm,
-      key,
-      energy,
-    },
-  };
 }
 
-export default async function ProjectDetailPage({ params }: ProjectPageProps) {
+export default async function ProjectDetailPage({
+  params,
+}: ProjectPageProps) {
   const { id } = await params;
   const supabase = await createClient();
 
   const { data: authData } = await supabase.auth.getClaims();
-  if (!authData?.claims?.sub) redirect("/login");
+
+  if (!authData?.claims?.sub) {
+    redirect("/login");
+  }
+
   const userId = authData.claims.sub;
 
   const { data: project } = await supabase
@@ -242,7 +198,9 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
     .eq("user_id", userId)
     .single();
 
-  if (!project) redirect("/app");
+  if (!project) {
+    redirect("/app");
+  }
 
   const { data: allTracks } = await supabase
     .from("tracks")
@@ -253,41 +211,69 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
   const { data: candidates } = await supabase
     .from("set_candidates")
     .select(`
-      id, track_id, notes,
+      id,
+      track_id,
+      notes,
       tracks (
-        id, title, artist, bpm, musical_key, energy, mood, source, notes
+        id,
+        title,
+        artist,
+        bpm,
+        musical_key,
+        energy,
+        mood,
+        source,
+        notes
       )
     `)
     .eq("project_id", id)
     .order("created_at", { ascending: true });
 
-  const { data: tracklistItems } = await supabase
+  const { data: rawTracklistItems } = await supabase
     .from("set_tracklist_items")
     .select(`
-      id, position, track_id, block_id,
+      id,
+      position,
+      track_id,
+      block_id,
       set_blocks ( name ),
       tracks (
-        id, title, artist, bpm, musical_key, energy, mood
+        id,
+        title,
+        artist,
+        bpm,
+        musical_key,
+        energy,
+        mood
       )
     `)
     .eq("project_id", id)
     .order("position", { ascending: true });
 
-  const tracklistTrackIds = new Set((tracklistItems ?? []).map((i) => i.track_id));
-  const candidateTrackIds = new Set((candidates ?? []).map((c) => c.track_id));
+  const tracklistItems = (rawTracklistItems ?? []) as TracklistItem[];
+
+  const tracklistTrackIds = new Set(
+    tracklistItems.map((item) => item.track_id)
+  );
+
+  const candidateTrackIds = new Set(
+    (candidates ?? []).map((candidate) => candidate.track_id)
+  );
 
   const pendingCandidates =
-    candidates?.filter((c) => !tracklistTrackIds.has(c.track_id)) ?? [];
+    candidates?.filter(
+      (candidate) => !tracklistTrackIds.has(candidate.track_id)
+    ) ?? [];
 
   const availableTracks =
-    allTracks?.filter((t) => !candidateTrackIds.has(t.id)) ?? [];
+    allTracks?.filter((track) => !candidateTrackIds.has(track.id)) ?? [];
 
   const addCandidateAction = addCandidate.bind(null, id);
 
   const groupedItems: GroupedItem[] = [];
   let currentBlock: GroupedBlock | null = null;
 
-  for (const item of tracklistItems ?? []) {
+  for (const item of tracklistItems) {
     if (item.block_id) {
       if (!currentBlock || currentBlock.block_id !== item.block_id) {
         currentBlock = {
@@ -298,13 +284,17 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             : item.set_blocks?.name || "Bloco",
           items: [item],
         };
+
         groupedItems.push(currentBlock);
       } else {
         currentBlock.items.push(item);
       }
     } else {
       currentBlock = null;
-      groupedItems.push({ isBlock: false, item });
+      groupedItems.push({
+        isBlock: false,
+        item,
+      });
     }
   }
 
@@ -312,10 +302,14 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
     <main className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-white/10 bg-slate-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 sm:px-10 lg:px-12">
-          <Link href="/app" className="flex items-center gap-3 transition hover:opacity-80">
+          <Link
+            href="/app"
+            className="flex items-center gap-3 transition hover:opacity-80"
+          >
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-300 font-black text-slate-950">
               M
             </div>
+
             <div>
               <p className="font-bold tracking-tight">MixBrain</p>
               <p className="text-xs text-slate-400">Projeto de set</p>
@@ -329,12 +323,14 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             >
               Workspace
             </Link>
+
             <Link
               href="/app/glossario"
               className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
             >
               Glossário
             </Link>
+
             <LogoutButton />
           </div>
         </div>
@@ -345,9 +341,11 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
             Projeto
           </p>
+
           <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-5xl">
             {project.name}
           </h1>
+
           {project.description ? (
             <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-300">
               {project.description}
@@ -368,10 +366,12 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
                   Candidatas
                 </p>
+
                 <h2 className="mt-2 text-2xl font-black tracking-tight">
                   Tracks disponíveis
                 </h2>
               </div>
+
               <span className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-300">
                 {pendingCandidates.length}
               </span>
@@ -381,6 +381,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               <h3 className="mb-3 text-sm font-bold text-slate-300">
                 Adicionar da biblioteca
               </h3>
+
               <form action={addCandidateAction} className="flex flex-col gap-3">
                 <select
                   name="trackId"
@@ -388,9 +389,10 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                   required
                 >
                   <option value="">Selecione uma track...</option>
-                  {availableTracks.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.title} {t.artist ? `- ${t.artist}` : ""}
+
+                  {availableTracks.map((track) => (
+                    <option key={track.id} value={track.id}>
+                      {track.title} {track.artist ? `- ${track.artist}` : ""}
                     </option>
                   ))}
                 </select>
@@ -422,7 +424,9 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                     ? candidate.tracks[0]
                     : candidate.tracks;
 
-                  if (!track) return null;
+                  if (!track) {
+                    return null;
+                  }
 
                   return (
                     <article
@@ -432,12 +436,15 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                       <div className="flex justify-between gap-4">
                         <div>
                           <h3 className="text-lg font-bold">{track.title}</h3>
-                          <p className="text-sm text-slate-400">{track.artist}</p>
+                          <p className="text-sm text-slate-400">
+                            {track.artist || "Artista não informado"}
+                          </p>
                         </div>
 
                         <form action={approveCandidateToTracklist}>
                           <input type="hidden" name="project_id" value={id} />
                           <input type="hidden" name="track_id" value={track.id} />
+
                           <button
                             type="submit"
                             className="rounded-full bg-cyan-300 px-4 py-2 text-sm font-bold text-slate-950 hover:opacity-90"
@@ -474,6 +481,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
                   Tracklist
                 </p>
+
                 <h2 className="mt-2 text-2xl font-black tracking-tight">
                   Sequência e Blocos
                 </h2>
@@ -493,6 +501,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 className="w-1/2 bg-transparent text-sm text-white outline-none"
                 required
               />
+
               <button
                 form="create-block-form"
                 type="submit"
@@ -504,7 +513,9 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
             <div className="mt-6 space-y-4">
               {groupedItems.length === 0 ? (
-                <div className="p-6 text-slate-400">Nenhuma track aprovada.</div>
+                <div className="p-6 text-slate-400">
+                  Nenhuma track aprovada.
+                </div>
               ) : (
                 groupedItems.map((group, index) => {
                   const isFirst = index === 0;
@@ -521,6 +532,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                             <span className="font-bold tracking-tight text-indigo-400">
                               ❄️ {group.block_name}
                             </span>
+
                             <span className="text-xs text-indigo-400/50">
                               {group.items.length} tracks
                             </span>
@@ -528,14 +540,24 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
                           <div className="flex gap-2">
                             <form action={moveEntityUp}>
-                              <input type="hidden" name="project_id" value={id} />
+                              <input
+                                type="hidden"
+                                name="project_id"
+                                value={id}
+                              />
                               <input
                                 type="hidden"
                                 name="entity_id"
                                 value={group.block_id}
                               />
-                              <input type="hidden" name="is_block" value="true" />
+                              <input
+                                type="hidden"
+                                name="is_block"
+                                value="true"
+                              />
+
                               <button
+                                type="submit"
                                 disabled={isFirst}
                                 className="p-1 text-slate-400 hover:text-white disabled:opacity-30"
                               >
@@ -544,14 +566,24 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                             </form>
 
                             <form action={moveEntityDown}>
-                              <input type="hidden" name="project_id" value={id} />
+                              <input
+                                type="hidden"
+                                name="project_id"
+                                value={id}
+                              />
                               <input
                                 type="hidden"
                                 name="entity_id"
                                 value={group.block_id}
                               />
-                              <input type="hidden" name="is_block" value="true" />
+                              <input
+                                type="hidden"
+                                name="is_block"
+                                value="true"
+                              />
+
                               <button
+                                type="submit"
                                 disabled={isLast}
                                 className="p-1 text-slate-400 hover:text-white disabled:opacity-30"
                               >
@@ -560,9 +592,21 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                             </form>
 
                             <form action={dissolveFrozenBlock}>
-                              <input type="hidden" name="project_id" value={id} />
-                              <input type="hidden" name="block_id" value={group.block_id} />
-                              <button className="ml-2 p-1 text-rose-400 hover:text-rose-300">
+                              <input
+                                type="hidden"
+                                name="project_id"
+                                value={id}
+                              />
+                              <input
+                                type="hidden"
+                                name="block_id"
+                                value={group.block_id}
+                              />
+
+                              <button
+                                type="submit"
+                                className="ml-2 p-1 text-rose-400 hover:text-rose-300"
+                              >
                                 Desfazer
                               </button>
                             </form>
@@ -570,19 +614,19 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                         </div>
 
                         <div className="space-y-3">
-                          {group.items.map((item: TracklistItem, itemIndex: number) => {
-                            const track = Array.isArray(item.tracks)
-                              ? item.tracks[0]
-                              : item.tracks;
+                          {group.items.map((item, itemIndex) => {
+                            const track = getTrackFromRelation(item.tracks);
+
+                            if (!track) {
+                              return null;
+                            }
 
                             const nextItem = group.items[itemIndex + 1];
                             const nextTrack = nextItem
-                              ? Array.isArray(nextItem.tracks)
-                                ? nextItem.tracks[0]
-                                : nextItem.tracks
+                              ? getTrackFromRelation(nextItem.tracks)
                               : null;
 
-                            const compatibility = getTransitionCompatibility(
+                            const transitionScore = calculateTransitionScore(
                               track,
                               nextTrack
                             );
@@ -599,7 +643,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                       {track.title}
                                     </p>
                                     <p className="text-xs text-slate-400">
-                                      {track.artist}
+                                      {track.artist || "Artista não informado"}
                                     </p>
 
                                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
@@ -619,30 +663,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                   </div>
                                 </article>
 
-                                {compatibility ? (
-                                  <div
-                                    className={`rounded-xl border p-3 text-sm ${compatibility.tone}`}
-                                  >
-                                    <div className="flex items-center justify-between gap-4">
-                                      <span className="font-bold">
-                                        Compatibilidade com a próxima:{" "}
-                                        {compatibility.finalScore}%
-                                      </span>
-                                      <span>{compatibility.label}</span>
-                                    </div>
-                                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                                      <span className="rounded-full border border-current/20 px-2 py-1">
-                                        BPM: {compatibility.reasons.bpm.label}
-                                      </span>
-                                      <span className="rounded-full border border-current/20 px-2 py-1">
-                                        Key: {compatibility.reasons.key.label}
-                                      </span>
-                                      <span className="rounded-full border border-current/20 px-2 py-1">
-                                        Energia: {compatibility.reasons.energy.label}
-                                      </span>
-                                    </div>
-                                  </div>
-                                ) : null}
+                                <TransitionScoreCard score={transitionScore} />
                               </div>
                             );
                           })}
@@ -651,33 +672,27 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                     );
                   }
 
-                  const nextGroup: GroupedItem | undefined = groupedItems[index + 1];
-                    let nextTrack: Track | null = null;
+                  const track = getTrackFromRelation(group.item.tracks);
 
-                    if (nextGroup?.isBlock) {
-                    nextTrack = Array.isArray(nextGroup.items[0].tracks)
-                        ? nextGroup.items[0].tracks[0]
-                        : nextGroup.items[0].tracks;
-                    } else if (nextGroup && !nextGroup.isBlock) {
-                    nextTrack = Array.isArray(nextGroup.item.tracks)
-                        ? nextGroup.item.tracks[0]
-                        : nextGroup.item.tracks;
-                    }
-
-                  const nextGroup = groupedItems[index + 1];
-                  let nextTrack = null;
-
-                  if (nextGroup?.isBlock) {
-                    nextTrack = Array.isArray(nextGroup.items[0].tracks)
-                      ? nextGroup.items[0].tracks[0]
-                      : nextGroup.items[0].tracks;
-                  } else if (nextGroup?.item) {
-                    nextTrack = Array.isArray(nextGroup.item.tracks)
-                      ? nextGroup.item.tracks[0]
-                      : nextGroup.item.tracks;
+                  if (!track) {
+                    return null;
                   }
 
-                  const compatibility = getTransitionCompatibility(track, nextTrack);
+                  const nextGroup = groupedItems[index + 1];
+                  let nextTrack: ScoreTrack | null = null;
+
+                  if (nextGroup?.isBlock) {
+                    nextTrack = getTrackFromRelation(
+                      nextGroup.items[0].tracks
+                    );
+                  } else if (nextGroup && !nextGroup.isBlock) {
+                    nextTrack = getTrackFromRelation(nextGroup.item.tracks);
+                  }
+
+                  const transitionScore = calculateTransitionScore(
+                    track,
+                    nextTrack
+                  );
 
                   return (
                     <div key={group.item.id} className="space-y-2">
@@ -691,12 +706,16 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                               value={group.item.id}
                               className="h-5 w-5 rounded border-white/20 bg-slate-900"
                             />
+
                             <div className="w-6 text-sm font-bold text-cyan-500">
                               {group.item.position}
                             </div>
+
                             <div>
                               <h3 className="font-bold">{track.title}</h3>
-                              <p className="text-xs text-slate-400">{track.artist}</p>
+                              <p className="text-xs text-slate-400">
+                                {track.artist || "Artista não informado"}
+                              </p>
 
                               <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
                                 <span className="rounded-full border border-white/10 px-3 py-1">
@@ -718,14 +737,24 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                           <div className="flex flex-col gap-2">
                             <div className="flex gap-2">
                               <form action={moveEntityUp}>
-                                <input type="hidden" name="project_id" value={id} />
+                                <input
+                                  type="hidden"
+                                  name="project_id"
+                                  value={id}
+                                />
                                 <input
                                   type="hidden"
                                   name="entity_id"
                                   value={group.item.id}
                                 />
-                                <input type="hidden" name="is_block" value="false" />
+                                <input
+                                  type="hidden"
+                                  name="is_block"
+                                  value="false"
+                                />
+
                                 <button
+                                  type="submit"
                                   disabled={isFirst}
                                   className="text-slate-400 hover:text-white disabled:opacity-30"
                                 >
@@ -734,14 +763,24 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                               </form>
 
                               <form action={moveEntityDown}>
-                                <input type="hidden" name="project_id" value={id} />
+                                <input
+                                  type="hidden"
+                                  name="project_id"
+                                  value={id}
+                                />
                                 <input
                                   type="hidden"
                                   name="entity_id"
                                   value={group.item.id}
                                 />
-                                <input type="hidden" name="is_block" value="false" />
+                                <input
+                                  type="hidden"
+                                  name="is_block"
+                                  value="false"
+                                />
+
                                 <button
+                                  type="submit"
                                   disabled={isLast}
                                   className="text-slate-400 hover:text-white disabled:opacity-30"
                                 >
@@ -750,14 +789,25 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                               </form>
                             </div>
 
-                            <form action={removeFromTracklist} className="text-right">
-                              <input type="hidden" name="project_id" value={id} />
+                            <form
+                              action={removeFromTracklist}
+                              className="text-right"
+                            >
+                              <input
+                                type="hidden"
+                                name="project_id"
+                                value={id}
+                              />
                               <input
                                 type="hidden"
                                 name="tracklist_item_id"
                                 value={group.item.id}
                               />
-                              <button className="text-xs text-rose-400 hover:text-rose-300">
+
+                              <button
+                                type="submit"
+                                className="text-xs text-rose-400 hover:text-rose-300"
+                              >
                                 Remover
                               </button>
                             </form>
@@ -765,29 +815,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                         </div>
                       </article>
 
-                      {compatibility ? (
-                        <div
-                          className={`rounded-xl border p-3 text-sm ${compatibility.tone}`}
-                        >
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="font-bold">
-                              Compatibilidade com a próxima: {compatibility.finalScore}%
-                            </span>
-                            <span>{compatibility.label}</span>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                            <span className="rounded-full border border-current/20 px-2 py-1">
-                              BPM: {compatibility.reasons.bpm.label}
-                            </span>
-                            <span className="rounded-full border border-current/20 px-2 py-1">
-                              Key: {compatibility.reasons.key.label}
-                            </span>
-                            <span className="rounded-full border border-current/20 px-2 py-1">
-                              Energia: {compatibility.reasons.energy.label}
-                            </span>
-                          </div>
-                        </div>
-                      ) : null}
+                      <TransitionScoreCard score={transitionScore} />
                     </div>
                   );
                 })
