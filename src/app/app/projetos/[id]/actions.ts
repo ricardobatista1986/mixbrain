@@ -3,6 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
+type SupabaseLike = Awaited<ReturnType<typeof createClient>>;
+
+type OrderUpdateItem = {
+  id: string;
+  newPosition: number;
+};
+
 async function requireUserAndProject(projectId: string) {
   const supabase = await createClient();
 
@@ -30,14 +37,33 @@ async function requireUserAndProject(projectId: string) {
 }
 
 // Helper seguro para reordenar múltiplos itens sem violar restrições do banco
-async function applyNewOrder(supabase: any, projectId: string, newOrderArray: any[]) {
-  // Passo 1: joga todas as posições para negativo (evita conflito de posição única)
+async function applyNewOrder(
+  supabase: SupabaseLike,
+  projectId: string,
+  newOrderArray: OrderUpdateItem[]
+) {
   for (const item of newOrderArray) {
-    await supabase.from("set_tracklist_items").update({ position: -item.newPosition }).eq("id", item.id);
+    const { error } = await supabase
+      .from("set_tracklist_items")
+      .update({ position: -item.newPosition })
+      .eq("id", item.id)
+      .eq("project_id", projectId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
   }
-  // Passo 2: consolida a posição correta positiva
+
   for (const item of newOrderArray) {
-    await supabase.from("set_tracklist_items").update({ position: item.newPosition }).eq("id", item.id);
+    const { error } = await supabase
+      .from("set_tracklist_items")
+      .update({ position: item.newPosition })
+      .eq("id", item.id)
+      .eq("project_id", projectId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
   }
 }
 
