@@ -22,6 +22,10 @@ function chunkArray<T>(items: T[], size: number) {
   return chunks;
 }
 
+function makeTrackKey(title: string, artist: string | null) {
+  return `${title.trim().toLowerCase()}::${(artist ?? "").trim().toLowerCase()}`;
+}
+
 export async function importTracksFromCsv(rows: ImportRow[]) {
   try {
     const supabase = await createClient();
@@ -63,7 +67,39 @@ export async function importTracksFromCsv(rows: ImportRow[]) {
       };
     }
 
-    const batches = chunkArray(sanitizedRows, 500);
+    const { data: existingTracks, error: existingError } = await supabase
+      .from("tracks")
+      .select("title, artist")
+      .eq("user_id", userId);
+
+    if (existingError) {
+      return {
+        ok: false,
+        message: `Erro ao consultar biblioteca existente: ${existingError.message}`,
+      };
+    }
+
+    const existingKeys = new Set(
+      (existingTracks ?? []).map((track) => makeTrackKey(track.title, track.artist))
+    );
+
+    const rowsToInsert = sanitizedRows.filter(
+      (row) => !existingKeys.has(makeTrackKey(row.title, row.artist))
+    );
+
+    const ignoredCount = sanitizedRows.length - rowsToInsert.length;
+
+    if (rowsToInsert.length === 0) {
+      return {
+        ok: true,
+        message:
+          ignoredCount > 0
+            ? `Nenhuma track nova foi importada. ${ignoredCount} já existia(m) na biblioteca.`
+            : "Nenhuma track nova foi importada.",
+      };
+    }
+
+    const batches = chunkArray(rowsToInsert, 500);
 
     for (const batch of batches) {
       const { error } = await supabase.from("tracks").insert(batch);
@@ -78,7 +114,7 @@ export async function importTracksFromCsv(rows: ImportRow[]) {
 
     return {
       ok: true,
-      message: `${sanitizedRows.length} track(s) importada(s) com sucesso.`,
+      message: `${rowsToInsert.length} track(s) importada(s) com sucesso. ${ignoredCount} linha(s) já existiam e foram ignoradas.`,
     };
   } catch (error) {
     return {

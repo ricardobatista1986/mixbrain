@@ -5,6 +5,8 @@ import Papa from "papaparse";
 import Link from "next/link";
 import { importTracksFromCsv } from "./server-actions";
 
+type RawCsvRow = Record<string, string>;
+
 type ParsedRow = {
   title: string;
   artist: string | null;
@@ -15,24 +17,60 @@ type ParsedRow = {
   notes: string | null;
 };
 
-type RawCsvRow = Record<string, string>;
+type MappingState = {
+  title: string;
+  artist: string;
+  bpm: string;
+  musical_key: string;
+  energy: string;
+  mood: string;
+  notes: string;
+};
+
+const TARGET_FIELDS: Array<keyof MappingState> = [
+  "title",
+  "artist",
+  "bpm",
+  "musical_key",
+  "energy",
+  "mood",
+  "notes",
+];
+
+const FIELD_LABELS: Record<keyof MappingState, string> = {
+  title: "Título",
+  artist: "Artista",
+  bpm: "BPM",
+  musical_key: "Key Camelot",
+  energy: "Energia",
+  mood: "Mood",
+  notes: "Notas",
+};
 
 function normalizeHeader(header: string) {
   return header.trim().toLowerCase();
 }
 
-function getValue(row: RawCsvRow, possibleKeys: string[]) {
-  for (const key of possibleKeys) {
-    const foundKey = Object.keys(row).find(
-      (rowKey) => normalizeHeader(rowKey) === normalizeHeader(key)
+function guessMapping(headers: string[]): MappingState {
+  function findHeader(possibleNames: string[]) {
+    const found = headers.find((header) =>
+      possibleNames.some(
+        (possible) => normalizeHeader(header) === normalizeHeader(possible)
+      )
     );
 
-    if (foundKey) {
-      return String(row[foundKey] ?? "").trim();
-    }
+    return found ?? "";
   }
 
-  return "";
+  return {
+    title: findHeader(["title", "track", "track_title", "name"]),
+    artist: findHeader(["artist", "artists"]),
+    bpm: findHeader(["bpm"]),
+    musical_key: findHeader(["musical_key", "key", "camelot"]),
+    energy: findHeader(["energy"]),
+    mood: findHeader(["mood"]),
+    notes: findHeader(["notes", "comment", "comments"]),
+  };
 }
 
 function toNullableString(value: string) {
@@ -52,45 +90,116 @@ function toNullableNumber(value: string) {
   return parsed;
 }
 
-function transformRow(row: RawCsvRow): ParsedRow | null {
-  const title = getValue(row, ["title", "track", "track_title", "name"]);
-  const artist = getValue(row, ["artist", "artists"]);
-  const bpm = getValue(row, ["bpm"]);
-  const musicalKey = getValue(row, ["musical_key", "key", "camelot"]);
-  const energy = getValue(row, ["energy"]);
-  const mood = getValue(row, ["mood"]);
-  const notes = getValue(row, ["notes", "comment", "comments"]);
+function buildParsedRows(
+  sourceRows: RawCsvRow[],
+  mapping: MappingState
+): { validRows: ParsedRow[]; invalidCount: number } {
+  let invalidCount = 0;
 
-  if (!title) {
-    return null;
+  const validRows = sourceRows
+    .map((row) => {
+      const title = mapping.title ? String(row[mapping.title] ?? "").trim() : "";
+      const artist = mapping.artist ? String(row[mapping.artist] ?? "").trim() : "";
+      const bpm = mapping.bpm ? String(row[mapping.bpm] ?? "").trim() : "";
+      const musicalKey = mapping.musical_key
+        ? String(row[mapping.musical_key] ?? "").trim()
+        : "";
+      const energy = mapping.energy ? String(row[mapping.energy] ?? "").trim() : "";
+      const mood = mapping.mood ? String(row[mapping.mood] ?? "").trim() : "";
+      const notes = mapping.notes ? String(row[mapping.notes] ?? "").trim() : "";
+
+      if (!title) {
+        invalidCount += 1;
+        return null;
+      }
+
+      const parsedEnergy = toNullableNumber(energy);
+
+      if (parsedEnergy !== null && (parsedEnergy < 1 || parsedEnergy > 10)) {
+        invalidCount += 1;
+        return null;
+      }
+
+      return {
+        title,
+        artist: toNullableString(artist),
+        bpm: toNullableNumber(bpm),
+        musical_key: toNullableString(musicalKey),
+        energy: parsedEnergy,
+        mood: toNullableString(mood),
+        notes: toNullableString(notes),
+      };
+    })
+    .filter((row): row is ParsedRow => row !== null);
+
+  return { validRows, invalidCount };
+}
+
+function dedupeRows(rows: ParsedRow[]) {
+  const seen = new Set<string>();
+  const unique: ParsedRow[] = [];
+  let duplicates = 0;
+
+  for (const row of rows) {
+    const key = `${row.title.trim().toLowerCase()}::${(row.artist ?? "")
+      .trim()
+      .toLowerCase()}`;
+
+    if (seen.has(key)) {
+      duplicates += 1;
+      continue;
+    }
+
+    seen.add(key);
+    unique.push(row);
   }
 
   return {
-    title,
-    artist: toNullableString(artist),
-    bpm: toNullableNumber(bpm),
-    musical_key: toNullableString(musicalKey),
-    energy: toNullableNumber(energy),
-    mood: toNullableString(mood),
-    notes: toNullableString(notes),
+    uniqueRows: unique,
+    duplicateCount: duplicates,
   };
 }
 
 export default function ImportarCsvPage() {
-  const [rows, setRows] = useState<ParsedRow[]>([]);
-  const [fileName, setFileName] = useState<string>("");
-  const [error, setError] = useState<string>("");
-  const [resultMessage, setResultMessage] = useState<string>("");
+  const [fileName, setFileName] = useState("");
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [rawRows, setRawRows] = useState<RawCsvRow[]>([]);
+  const [mapping, setMapping] = useState<MappingState>({
+    title: "",
+    artist: "",
+    bpm: "",
+    musical_key: "",
+    energy: "",
+    mood: "",
+    notes: "",
+  });
+  const [error, setError] = useState("");
+  const [resultMessage, setResultMessage] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  const previewRows = useMemo(() => rows.slice(0, 8), [rows]);
+  function resetState() {
+    setHeaders([]);
+    setRawRows([]);
+    setMapping({
+      title: "",
+      artist: "",
+      bpm: "",
+      musical_key: "",
+      energy: "",
+      mood: "",
+      notes: "",
+    });
+  }
 
   function handleFileChange(file: File | null) {
     setError("");
     setResultMessage("");
-    setRows([]);
+    resetState();
 
-    if (!file) return;
+    if (!file) {
+      setFileName("");
+      return;
+    }
 
     setFileName(file.name);
 
@@ -98,16 +207,22 @@ export default function ImportarCsvPage() {
       header: true,
       skipEmptyLines: true,
       complete(results) {
-        const parsed = (results.data || [])
-          .map(transformRow)
-          .filter((row): row is ParsedRow => row !== null);
+        const parsedRows = results.data ?? [];
+        const metaFields = (results.meta.fields ?? []).filter(Boolean);
 
-        if (parsed.length === 0) {
-          setError("Nenhuma track válida foi encontrada no CSV.");
+        if (!metaFields.length) {
+          setError("O CSV não possui cabeçalhos válidos.");
           return;
         }
 
-        setRows(parsed);
+        if (!parsedRows.length) {
+          setError("O CSV não possui linhas de dados.");
+          return;
+        }
+
+        setHeaders(metaFields);
+        setRawRows(parsedRows);
+        setMapping(guessMapping(metaFields));
       },
       error(parseError) {
         setError(`Erro ao ler CSV: ${parseError.message}`);
@@ -115,17 +230,35 @@ export default function ImportarCsvPage() {
     });
   }
 
+  const processed = useMemo(() => {
+    const { validRows, invalidCount } = buildParsedRows(rawRows, mapping);
+    const { uniqueRows, duplicateCount } = dedupeRows(validRows);
+
+    return {
+      validRows,
+      invalidCount,
+      duplicateCount,
+      uniqueRows,
+      previewRows: uniqueRows.slice(0, 10),
+    };
+  }, [rawRows, mapping]);
+
   async function handleImport() {
     setError("");
     setResultMessage("");
 
-    if (rows.length === 0) {
-      setError("Nenhuma linha pronta para importação.");
+    if (!mapping.title) {
+      setError("Você precisa mapear a coluna de título.");
+      return;
+    }
+
+    if (processed.uniqueRows.length === 0) {
+      setError("Nenhuma linha válida restou para importar.");
       return;
     }
 
     startTransition(async () => {
-      const result = await importTracksFromCsv(rows);
+      const result = await importTracksFromCsv(processed.uniqueRows);
 
       if (!result.ok) {
         setError(result.message);
@@ -133,15 +266,15 @@ export default function ImportarCsvPage() {
       }
 
       setResultMessage(result.message);
-      setRows([]);
       setFileName("");
+      resetState();
     });
   }
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
       <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,_rgba(34,211,238,0.14),_transparent_40%)]">
-        <div className="mx-auto max-w-5xl px-6 py-14 sm:px-10 lg:px-12">
+        <div className="mx-auto max-w-6xl px-6 py-14 sm:px-10 lg:px-12">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
             Biblioteca
           </p>
@@ -149,8 +282,8 @@ export default function ImportarCsvPage() {
             Importar tracks por CSV
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-300">
-            Faça upload do seu catálogo e importe várias tracks com BPM, key,
-            energia e mood de uma vez.
+            Faça upload do seu catálogo, mapeie colunas, revise o preview e
+            importe em lote com deduplicação.
           </p>
 
           <div className="mt-6">
@@ -164,14 +297,11 @@ export default function ImportarCsvPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-5xl px-6 py-10 sm:px-10 lg:px-12">
+      <section className="mx-auto max-w-6xl px-6 py-10 sm:px-10 lg:px-12">
         <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-          <h2 className="text-2xl font-black tracking-tight">
-            Upload do arquivo
-          </h2>
+          <h2 className="text-2xl font-black tracking-tight">1. Upload</h2>
           <p className="mt-2 text-sm text-slate-400">
-            Colunas aceitas: title, artist, bpm, musical_key, energy, mood,
-            notes. Também aceitamos aliases como key, camelot, comment e name.
+            Envie um CSV com cabeçalho. O sistema tentará reconhecer as colunas automaticamente.
           </p>
 
           <div className="mt-6">
@@ -203,29 +333,106 @@ export default function ImportarCsvPage() {
         </div>
 
         <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+          <h2 className="text-2xl font-black tracking-tight">2. Mapeamento de colunas</h2>
+          <p className="mt-2 text-sm text-slate-400">
+            Confirme quais colunas do CSV correspondem aos campos do MixBrain.
+          </p>
+
+          {headers.length === 0 ? (
+            <div className="mt-6 rounded-2xl border border-dashed border-white/10 p-6 text-center text-slate-400">
+              Envie um CSV para começar o mapeamento.
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {TARGET_FIELDS.map((field) => (
+                <div
+                  key={field}
+                  className="rounded-2xl border border-white/10 bg-slate-900/50 p-4"
+                >
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                    {FIELD_LABELS[field]}
+                    {field === "title" ? " *" : ""}
+                  </label>
+
+                  <select
+                    value={mapping[field]}
+                    onChange={(e) =>
+                      setMapping((current) => ({
+                        ...current,
+                        [field]: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none"
+                  >
+                    <option value="">Não mapear</option>
+                    {headers.map((header) => (
+                      <option key={`${field}-${header}`} value={header}>
+                        {header}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-black tracking-tight">
-                Preview da importação
+                3. Preview e validação
               </h2>
               <p className="mt-2 text-sm text-slate-400">
-                As primeiras linhas válidas do CSV aparecem aqui antes da gravação.
+                Veja o que será importado, o que foi invalidado e o que foi removido por duplicidade no arquivo.
               </p>
             </div>
 
             <button
               type="button"
               onClick={handleImport}
-              disabled={rows.length === 0 || isPending}
+              disabled={processed.uniqueRows.length === 0 || isPending}
               className="rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isPending ? "Importando..." : `Importar ${rows.length} track(s)`}
+              {isPending
+                ? "Importando..."
+                : `Importar ${processed.uniqueRows.length} track(s)`}
             </button>
           </div>
 
-          {rows.length === 0 ? (
+          <div className="mt-6 grid gap-4 md:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                Linhas CSV
+              </p>
+              <p className="mt-2 text-3xl font-black">{rawRows.length}</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                Linhas válidas
+              </p>
+              <p className="mt-2 text-3xl font-black">{processed.validRows.length}</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                Inválidas
+              </p>
+              <p className="mt-2 text-3xl font-black">{processed.invalidCount}</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                Duplicadas no CSV
+              </p>
+              <p className="mt-2 text-3xl font-black">{processed.duplicateCount}</p>
+            </div>
+          </div>
+
+          {processed.uniqueRows.length === 0 ? (
             <div className="mt-6 rounded-2xl border border-dashed border-white/10 p-6 text-center text-slate-400">
-              Nenhuma linha pronta para preview.
+              Nenhuma linha pronta para importação.
             </div>
           ) : (
             <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10">
@@ -242,9 +449,9 @@ export default function ImportarCsvPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {previewRows.map((row, index) => (
+                  {processed.previewRows.map((row, index) => (
                     <tr
-                      key={`${row.title}-${index}`}
+                      key={`${row.title}-${row.artist ?? "sem-artista"}-${index}`}
                       className="border-t border-white/10"
                     >
                       <td className="px-4 py-3">{row.title}</td>
@@ -261,18 +468,15 @@ export default function ImportarCsvPage() {
             </div>
           )}
 
-          {rows.length > 8 ? (
+          {processed.uniqueRows.length > 10 ? (
             <p className="mt-3 text-xs text-slate-400">
-              Mostrando 8 de {rows.length} linhas válidas.
+              Mostrando 10 de {processed.uniqueRows.length} linhas prontas para importação.
             </p>
           ) : null}
         </div>
 
         <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-          <h2 className="text-2xl font-black tracking-tight">
-            Exemplo de CSV
-          </h2>
-
+          <h2 className="text-2xl font-black tracking-tight">Exemplo de CSV</h2>
           <pre className="mt-4 overflow-x-auto rounded-2xl border border-white/10 bg-slate-900/70 p-4 text-xs text-slate-300">
 {`title,artist,bpm,musical_key,energy,mood,notes
 Track A,Artist A,124,8A,6,hypnotic,opening tool
