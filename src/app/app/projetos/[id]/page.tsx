@@ -10,10 +10,13 @@ import {
   moveEntityDown,
   moveEntityUp,
   removeFromTracklist,
+  updateCuratorialFields,
 } from "./actions";
 import {
   calculateTransitionScore,
+  type CuratorialMoment,
   type ScoreTrack,
+  type ScoreTracklistItemContext,
   type TransitionScore,
 } from "@/lib/mixbrain/transition-score";
 
@@ -40,6 +43,8 @@ type TracklistItem = {
   position: number;
   track_id: string;
   block_id: string | null;
+  curatorial_moment: CuratorialMoment | null;
+  curatorial_intent: string | null;
   tracks: Track | Track[] | null;
   set_blocks?: BlockRef | BlockRef[] | null;
 };
@@ -92,6 +97,35 @@ function getFactorStatusLabel(status: "available" | "missing" | "pending") {
   return "Aguardando contexto";
 }
 
+function getMomentLabel(moment: CuratorialMoment | null) {
+  const labels: Record<CuratorialMoment, string> = {
+    opening: "Abertura",
+    build: "Construção",
+    valley: "Vale",
+    peak: "Pico",
+    contemplation: "Contemplação",
+    closing: "Encerramento",
+  };
+
+  if (!moment) {
+    return "Sem momento";
+  }
+
+  return labels[moment];
+}
+
+function getContextFromItem(
+  item: TracklistItem | null | undefined
+): ScoreTracklistItemContext | null {
+  if (!item) {
+    return null;
+  }
+
+  return {
+    curatorial_moment: item.curatorial_moment,
+  };
+}
+
 function TransitionScoreCard({
   score,
 }: {
@@ -102,15 +136,12 @@ function TransitionScoreCard({
   }
 
   return (
-    <details
-      className={`rounded-xl border p-3 ${getScoreToneClasses(score)}`}
-    >
+    <details className={`rounded-xl border p-3 ${getScoreToneClasses(score)}`}>
       <summary className="cursor-pointer list-none">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-black">
-              Score MixBrain:{" "}
-              {score.finalScore === null ? "—" : `${score.finalScore}%`}
+              Score MixBrain: {score.finalScore === null ? "—" : `${score.finalScore}%`}
             </p>
             <p className="mt-1 text-xs opacity-80">
               Para a transição até a próxima track.
@@ -131,8 +162,7 @@ function TransitionScoreCard({
 
       <div className="mt-4 border-t border-current/20 pt-4">
         <p className="text-xs leading-5 opacity-80">
-          O score usa somente fatores com dados disponíveis. Narrativa e momento
-          ainda aguardam marcação curatorial do projeto.
+          O score usa somente fatores com dados disponíveis e marcações curatoriais já definidas no projeto.
         </p>
 
         <div className="mt-4 space-y-2">
@@ -177,9 +207,61 @@ function TransitionScoreCard({
   );
 }
 
-export default async function ProjectDetailPage({
-  params,
-}: ProjectPageProps) {
+function CuratorialEditor({
+  projectId,
+  item,
+}: {
+  projectId: string;
+  item: TracklistItem;
+}) {
+  return (
+    <form
+      action={updateCuratorialFields}
+      className="mt-3 rounded-xl border border-white/10 bg-slate-950/40 p-3"
+    >
+      <input type="hidden" name="project_id" value={projectId} />
+      <input type="hidden" name="tracklist_item_id" value={item.id} />
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="min-w-0 flex-1">
+          <label className="mb-1 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            Momento no set
+          </label>
+          <select
+            name="curatorial_moment"
+            defaultValue={item.curatorial_moment ?? ""}
+            className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none"
+          >
+            <option value="">Sem definição</option>
+            <option value="opening">Abertura</option>
+            <option value="build">Construção</option>
+            <option value="valley">Vale</option>
+            <option value="peak">Pico</option>
+            <option value="contemplation">Contemplação</option>
+            <option value="closing">Encerramento</option>
+          </select>
+        </div>
+
+        <div className="shrink-0">
+          <button
+            type="submit"
+            className="w-full rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700 sm:w-auto"
+          >
+            Salvar momento
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
+        <span className="rounded-full border border-white/10 px-3 py-1">
+          Momento atual: {getMomentLabel(item.curatorial_moment)}
+        </span>
+      </div>
+    </form>
+  );
+}
+
+export default async function ProjectDetailPage({ params }: ProjectPageProps) {
   const { id } = await params;
   const supabase = await createClient();
 
@@ -236,6 +318,8 @@ export default async function ProjectDetailPage({
       position,
       track_id,
       block_id,
+      curatorial_moment,
+      curatorial_intent,
       set_blocks ( name ),
       tracks (
         id,
@@ -252,18 +336,11 @@ export default async function ProjectDetailPage({
 
   const tracklistItems = (rawTracklistItems ?? []) as TracklistItem[];
 
-  const tracklistTrackIds = new Set(
-    tracklistItems.map((item) => item.track_id)
-  );
-
-  const candidateTrackIds = new Set(
-    (candidates ?? []).map((candidate) => candidate.track_id)
-  );
+  const tracklistTrackIds = new Set(tracklistItems.map((item) => item.track_id));
+  const candidateTrackIds = new Set((candidates ?? []).map((candidate) => candidate.track_id));
 
   const pendingCandidates =
-    candidates?.filter(
-      (candidate) => !tracklistTrackIds.has(candidate.track_id)
-    ) ?? [];
+    candidates?.filter((candidate) => !tracklistTrackIds.has(candidate.track_id)) ?? [];
 
   const availableTracks =
     allTracks?.filter((track) => !candidateTrackIds.has(track.id)) ?? [];
@@ -513,9 +590,7 @@ export default async function ProjectDetailPage({
 
             <div className="mt-6 space-y-4">
               {groupedItems.length === 0 ? (
-                <div className="p-6 text-slate-400">
-                  Nenhuma track aprovada.
-                </div>
+                <div className="p-6 text-slate-400">Nenhuma track aprovada.</div>
               ) : (
                 groupedItems.map((group, index) => {
                   const isFirst = index === 0;
@@ -540,22 +615,9 @@ export default async function ProjectDetailPage({
 
                           <div className="flex gap-2">
                             <form action={moveEntityUp}>
-                              <input
-                                type="hidden"
-                                name="project_id"
-                                value={id}
-                              />
-                              <input
-                                type="hidden"
-                                name="entity_id"
-                                value={group.block_id}
-                              />
-                              <input
-                                type="hidden"
-                                name="is_block"
-                                value="true"
-                              />
-
+                              <input type="hidden" name="project_id" value={id} />
+                              <input type="hidden" name="entity_id" value={group.block_id} />
+                              <input type="hidden" name="is_block" value="true" />
                               <button
                                 type="submit"
                                 disabled={isFirst}
@@ -566,22 +628,9 @@ export default async function ProjectDetailPage({
                             </form>
 
                             <form action={moveEntityDown}>
-                              <input
-                                type="hidden"
-                                name="project_id"
-                                value={id}
-                              />
-                              <input
-                                type="hidden"
-                                name="entity_id"
-                                value={group.block_id}
-                              />
-                              <input
-                                type="hidden"
-                                name="is_block"
-                                value="true"
-                              />
-
+                              <input type="hidden" name="project_id" value={id} />
+                              <input type="hidden" name="entity_id" value={group.block_id} />
+                              <input type="hidden" name="is_block" value="true" />
                               <button
                                 type="submit"
                                 disabled={isLast}
@@ -592,17 +641,8 @@ export default async function ProjectDetailPage({
                             </form>
 
                             <form action={dissolveFrozenBlock}>
-                              <input
-                                type="hidden"
-                                name="project_id"
-                                value={id}
-                              />
-                              <input
-                                type="hidden"
-                                name="block_id"
-                                value={group.block_id}
-                              />
-
+                              <input type="hidden" name="project_id" value={id} />
+                              <input type="hidden" name="block_id" value={group.block_id} />
                               <button
                                 type="submit"
                                 className="ml-2 p-1 text-rose-400 hover:text-rose-300"
@@ -628,38 +668,46 @@ export default async function ProjectDetailPage({
 
                             const transitionScore = calculateTransitionScore(
                               track,
-                              nextTrack
+                              nextTrack,
+                              getContextFromItem(item),
+                              getContextFromItem(nextItem)
                             );
 
                             return (
                               <div key={item.id} className="space-y-2">
-                                <article className="flex gap-4 rounded-xl border border-white/5 bg-slate-900/50 p-4">
-                                  <div className="w-6 text-sm font-bold text-slate-500">
-                                    {item.position}
-                                  </div>
+                                <article className="rounded-xl border border-white/5 bg-slate-900/50 p-4">
+                                  <div className="flex min-w-0 flex-col gap-4">
+                                    <div className="flex min-w-0 items-start gap-4">
+                                      <div className="w-6 shrink-0 text-sm font-bold text-slate-500">
+                                        {item.position}
+                                      </div>
 
-                                  <div className="flex-1">
-                                    <p className="font-bold text-slate-200">
-                                      {track.title}
-                                    </p>
-                                    <p className="text-xs text-slate-400">
-                                      {track.artist || "Artista não informado"}
-                                    </p>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="break-words font-bold text-slate-200">
+                                          {track.title}
+                                        </p>
+                                        <p className="break-words text-xs text-slate-400">
+                                          {track.artist || "Artista não informado"}
+                                        </p>
 
-                                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
-                                      <span className="rounded-full border border-white/10 px-3 py-1">
-                                        BPM: {track.bpm ?? "—"}
-                                      </span>
-                                      <span className="rounded-full border border-white/10 px-3 py-1">
-                                        Key: {track.musical_key ?? "—"}
-                                      </span>
-                                      <span className="rounded-full border border-white/10 px-3 py-1">
-                                        Energia: {track.energy ?? "—"}
-                                      </span>
-                                      <span className="rounded-full border border-white/10 px-3 py-1">
-                                        Mood: {track.mood ?? "—"}
-                                      </span>
+                                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
+                                          <span className="rounded-full border border-white/10 px-3 py-1">
+                                            BPM: {track.bpm ?? "—"}
+                                          </span>
+                                          <span className="rounded-full border border-white/10 px-3 py-1">
+                                            Key: {track.musical_key ?? "—"}
+                                          </span>
+                                          <span className="rounded-full border border-white/10 px-3 py-1">
+                                            Energia: {track.energy ?? "—"}
+                                          </span>
+                                          <span className="rounded-full border border-white/10 px-3 py-1">
+                                            Mood: {track.mood ?? "—"}
+                                          </span>
+                                        </div>
+                                      </div>
                                     </div>
+
+                                    <CuratorialEditor projectId={id} item={item} />
                                   </div>
                                 </article>
 
@@ -680,40 +728,47 @@ export default async function ProjectDetailPage({
 
                   const nextGroup = groupedItems[index + 1];
                   let nextTrack: ScoreTrack | null = null;
+                  let nextContext: ScoreTracklistItemContext | null = null;
 
                   if (nextGroup?.isBlock) {
-                    nextTrack = getTrackFromRelation(
-                      nextGroup.items[0].tracks
-                    );
+                    nextTrack = getTrackFromRelation(nextGroup.items[0].tracks);
+                    nextContext = getContextFromItem(nextGroup.items[0]);
                   } else if (nextGroup && !nextGroup.isBlock) {
                     nextTrack = getTrackFromRelation(nextGroup.item.tracks);
+                    nextContext = getContextFromItem(nextGroup.item);
                   }
 
                   const transitionScore = calculateTransitionScore(
                     track,
-                    nextTrack
+                    nextTrack,
+                    getContextFromItem(group.item),
+                    nextContext
                   );
 
                   return (
                     <div key={group.item.id} className="space-y-2">
                       <article className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.03] p-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <input
-                              form="create-block-form"
-                              type="checkbox"
-                              name="selected_items"
-                              value={group.item.id}
-                              className="h-5 w-5 rounded border-white/20 bg-slate-900"
-                            />
+                        <div className="flex min-w-0 flex-col gap-4">
+                          <div className="flex min-w-0 items-start gap-4">
+                            <div className="mt-1 shrink-0">
+                              <input
+                                form="create-block-form"
+                                type="checkbox"
+                                name="selected_items"
+                                value={group.item.id}
+                                className="h-5 w-5 rounded border-white/20 bg-slate-900"
+                              />
+                            </div>
 
-                            <div className="w-6 text-sm font-bold text-cyan-500">
+                            <div className="w-6 shrink-0 pt-0.5 text-sm font-bold text-cyan-500">
                               {group.item.position}
                             </div>
 
-                            <div>
-                              <h3 className="font-bold">{track.title}</h3>
-                              <p className="text-xs text-slate-400">
+                            <div className="min-w-0 flex-1">
+                              <h3 className="break-words font-bold">
+                                {track.title}
+                              </h3>
+                              <p className="break-words text-xs text-slate-400">
                                 {track.artist || "Artista não informado"}
                               </p>
 
@@ -732,86 +787,54 @@ export default async function ProjectDetailPage({
                                 </span>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="flex flex-col gap-2">
-                            <div className="flex gap-2">
-                              <form action={moveEntityUp}>
+                            <div className="flex shrink-0 flex-col items-end gap-2">
+                              <div className="flex gap-2">
+                                <form action={moveEntityUp}>
+                                  <input type="hidden" name="project_id" value={id} />
+                                  <input type="hidden" name="entity_id" value={group.item.id} />
+                                  <input type="hidden" name="is_block" value="false" />
+                                  <button
+                                    type="submit"
+                                    disabled={isFirst}
+                                    className="rounded-lg border border-white/10 px-2 py-1 text-slate-400 transition hover:text-white disabled:opacity-30"
+                                  >
+                                    ⬆️
+                                  </button>
+                                </form>
+
+                                <form action={moveEntityDown}>
+                                  <input type="hidden" name="project_id" value={id} />
+                                  <input type="hidden" name="entity_id" value={group.item.id} />
+                                  <input type="hidden" name="is_block" value="false" />
+                                  <button
+                                    type="submit"
+                                    disabled={isLast}
+                                    className="rounded-lg border border-white/10 px-2 py-1 text-slate-400 transition hover:text-white disabled:opacity-30"
+                                  >
+                                    ⬇️
+                                  </button>
+                                </form>
+                              </div>
+
+                              <form action={removeFromTracklist}>
+                                <input type="hidden" name="project_id" value={id} />
                                 <input
                                   type="hidden"
-                                  name="project_id"
-                                  value={id}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="entity_id"
+                                  name="tracklist_item_id"
                                   value={group.item.id}
                                 />
-                                <input
-                                  type="hidden"
-                                  name="is_block"
-                                  value="false"
-                                />
-
                                 <button
                                   type="submit"
-                                  disabled={isFirst}
-                                  className="text-slate-400 hover:text-white disabled:opacity-30"
+                                  className="text-xs text-rose-400 hover:text-rose-300"
                                 >
-                                  ⬆️
-                                </button>
-                              </form>
-
-                              <form action={moveEntityDown}>
-                                <input
-                                  type="hidden"
-                                  name="project_id"
-                                  value={id}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="entity_id"
-                                  value={group.item.id}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="is_block"
-                                  value="false"
-                                />
-
-                                <button
-                                  type="submit"
-                                  disabled={isLast}
-                                  className="text-slate-400 hover:text-white disabled:opacity-30"
-                                >
-                                  ⬇️
+                                  Remover
                                 </button>
                               </form>
                             </div>
-
-                            <form
-                              action={removeFromTracklist}
-                              className="text-right"
-                            >
-                              <input
-                                type="hidden"
-                                name="project_id"
-                                value={id}
-                              />
-                              <input
-                                type="hidden"
-                                name="tracklist_item_id"
-                                value={group.item.id}
-                              />
-
-                              <button
-                                type="submit"
-                                className="text-xs text-rose-400 hover:text-rose-300"
-                              >
-                                Remover
-                              </button>
-                            </form>
                           </div>
+
+                          <CuratorialEditor projectId={id} item={group.item} />
                         </div>
                       </article>
 

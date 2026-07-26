@@ -8,6 +8,18 @@ export type ScoreTrack = {
   mood: string | null;
 };
 
+export type CuratorialMoment =
+  | "opening"
+  | "build"
+  | "valley"
+  | "peak"
+  | "contemplation"
+  | "closing";
+
+export type ScoreTracklistItemContext = {
+  curatorial_moment: CuratorialMoment | null;
+};
+
 type CamelotKey = {
   number: number;
   letter: "A" | "B";
@@ -36,12 +48,7 @@ export type TransitionScore = {
   finalScore: number | null;
   confidence: number;
   label: "Excelente" | "Boa" | "Atenção" | "Fraca" | "Dados insuficientes";
-  tone:
-    | "emerald"
-    | "cyan"
-    | "amber"
-    | "rose"
-    | "slate";
+  tone: "emerald" | "cyan" | "amber" | "rose" | "slate";
   factors: ScoreFactor[];
 };
 
@@ -49,9 +56,7 @@ function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function parseCamelot(
-  musicalKey: string | null | undefined
-): CamelotKey | null {
+function parseCamelot(musicalKey: string | null | undefined): CamelotKey | null {
   if (!musicalKey) {
     return null;
   }
@@ -74,10 +79,7 @@ function circularCamelotDistance(first: number, second: number) {
   return Math.min(difference, 12 - difference);
 }
 
-function getHarmonyFactor(
-  currentTrack: ScoreTrack,
-  nextTrack: ScoreTrack
-): ScoreFactor {
+function getHarmonyFactor(currentTrack: ScoreTrack, nextTrack: ScoreTrack): ScoreFactor {
   const currentKey = parseCamelot(currentTrack.musical_key);
   const nextKey = parseCamelot(nextTrack.musical_key);
 
@@ -94,10 +96,7 @@ function getHarmonyFactor(
     };
   }
 
-  if (
-    currentKey.number === nextKey.number &&
-    currentKey.letter === nextKey.letter
-  ) {
+  if (currentKey.number === nextKey.number && currentKey.letter === nextKey.letter) {
     return {
       id: "harmony",
       title: "Harmonia",
@@ -109,10 +108,7 @@ function getHarmonyFactor(
     };
   }
 
-  if (
-    currentKey.number === nextKey.number &&
-    currentKey.letter !== nextKey.letter
-  ) {
+  if (currentKey.number === nextKey.number && currentKey.letter !== nextKey.letter) {
     return {
       id: "harmony",
       title: "Harmonia",
@@ -124,10 +120,7 @@ function getHarmonyFactor(
     };
   }
 
-  const distance = circularCamelotDistance(
-    currentKey.number,
-    nextKey.number
-  );
+  const distance = circularCamelotDistance(currentKey.number, nextKey.number);
 
   if (distance === 1 && currentKey.letter === nextKey.letter) {
     return {
@@ -166,10 +159,7 @@ function getHarmonyFactor(
   };
 }
 
-function getBpmFactor(
-  currentTrack: ScoreTrack,
-  nextTrack: ScoreTrack
-): ScoreFactor {
+function getBpmFactor(currentTrack: ScoreTrack, nextTrack: ScoreTrack): ScoreFactor {
   if (
     currentTrack.bpm === null ||
     nextTrack.bpm === null ||
@@ -221,10 +211,7 @@ function getBpmFactor(
   };
 }
 
-function getEnergyFactor(
-  currentTrack: ScoreTrack,
-  nextTrack: ScoreTrack
-): ScoreFactor {
+function getEnergyFactor(currentTrack: ScoreTrack, nextTrack: ScoreTrack): ScoreFactor {
   if (currentTrack.energy === null || nextTrack.energy === null) {
     return {
       id: "energy",
@@ -280,10 +267,7 @@ function normalizeMood(value: string) {
     .filter(Boolean);
 }
 
-function getMoodFactor(
-  currentTrack: ScoreTrack,
-  nextTrack: ScoreTrack
-): ScoreFactor {
+function getMoodFactor(currentTrack: ScoreTrack, nextTrack: ScoreTrack): ScoreFactor {
   if (!currentTrack.mood || !nextTrack.mood) {
     return {
       id: "mood",
@@ -300,9 +284,7 @@ function getMoodFactor(
   const currentMoods = normalizeMood(currentTrack.mood);
   const nextMoods = normalizeMood(nextTrack.mood);
 
-  const commonMoods = currentMoods.filter((mood) =>
-    nextMoods.includes(mood)
-  );
+  const commonMoods = currentMoods.filter((mood) => nextMoods.includes(mood));
 
   if (currentTrack.mood.trim().toLowerCase() === nextTrack.mood.trim().toLowerCase()) {
     return {
@@ -340,10 +322,7 @@ function getMoodFactor(
   };
 }
 
-function getDiversityFactor(
-  currentTrack: ScoreTrack,
-  nextTrack: ScoreTrack
-): ScoreFactor {
+function getDiversityFactor(currentTrack: ScoreTrack, nextTrack: ScoreTrack): ScoreFactor {
   if (!currentTrack.artist || !nextTrack.artist) {
     return {
       id: "diversity",
@@ -358,8 +337,7 @@ function getDiversityFactor(
   }
 
   const isSameArtist =
-    currentTrack.artist.trim().toLowerCase() ===
-    nextTrack.artist.trim().toLowerCase();
+    currentTrack.artist.trim().toLowerCase() === nextTrack.artist.trim().toLowerCase();
 
   if (isSameArtist) {
     return {
@@ -385,44 +363,187 @@ function getDiversityFactor(
   };
 }
 
-function getPendingFactor(
-  id: "narrative" | "timing",
-  title: string,
-  officialWeight: number,
-  explanation: string
+function getMomentLabel(moment: CuratorialMoment) {
+  const labels: Record<CuratorialMoment, string> = {
+    opening: "abertura",
+    build: "construção",
+    valley: "vale",
+    peak: "pico",
+    contemplation: "contemplação",
+    closing: "encerramento",
+  };
+
+  return labels[moment];
+}
+
+function getNarrativeFactor(
+  currentContext: ScoreTracklistItemContext | null | undefined,
+  nextContext: ScoreTracklistItemContext | null | undefined
 ): ScoreFactor {
+  const currentMoment = currentContext?.curatorial_moment ?? null;
+  const nextMoment = nextContext?.curatorial_moment ?? null;
+
+  if (!currentMoment || !nextMoment) {
+    return {
+      id: "narrative",
+      title: "Narrativa",
+      officialWeight: 28,
+      effectiveWeight: 0,
+      score: null,
+      status: "missing",
+      explanation:
+        "Sem momento curatorial nas duas tracks. Narrativa ainda não entrou no cálculo.",
+    };
+  }
+
+  const narrativeScores: Record<
+    CuratorialMoment,
+    Partial<Record<CuratorialMoment, number>>
+  > = {
+    opening: {
+      opening: 88,
+      build: 96,
+      valley: 55,
+      contemplation: 68,
+      peak: 30,
+      closing: 20,
+    },
+    build: {
+      opening: 35,
+      build: 86,
+      valley: 62,
+      contemplation: 58,
+      peak: 95,
+      closing: 28,
+    },
+    valley: {
+      opening: 42,
+      build: 84,
+      valley: 80,
+      contemplation: 90,
+      peak: 52,
+      closing: 40,
+    },
+    peak: {
+      opening: 18,
+      build: 40,
+      valley: 82,
+      contemplation: 72,
+      peak: 78,
+      closing: 60,
+    },
+    contemplation: {
+      opening: 40,
+      build: 74,
+      valley: 88,
+      contemplation: 84,
+      peak: 46,
+      closing: 92,
+    },
+    closing: {
+      opening: 12,
+      build: 18,
+      valley: 40,
+      contemplation: 62,
+      peak: 22,
+      closing: 96,
+    },
+  };
+
+  const score = narrativeScores[currentMoment][nextMoment] ?? 40;
+
   return {
-    id,
-    title,
-    officialWeight,
-    effectiveWeight: 0,
-    score: null,
-    status: "pending",
-    explanation,
+    id: "narrative",
+    title: "Narrativa",
+    officialWeight: 28,
+    effectiveWeight: 28,
+    score,
+    status: "available",
+    explanation: `Transição de ${getMomentLabel(currentMoment)} para ${getMomentLabel(nextMoment)}.`,
+  };
+}
+
+function getTimingFactor(
+  currentContext: ScoreTracklistItemContext | null | undefined,
+  nextContext: ScoreTracklistItemContext | null | undefined
+): ScoreFactor {
+  const currentMoment = currentContext?.curatorial_moment ?? null;
+  const nextMoment = nextContext?.curatorial_moment ?? null;
+
+  if (!currentMoment || !nextMoment) {
+    return {
+      id: "timing",
+      title: "Momento da track",
+      officialWeight: 22,
+      effectiveWeight: 0,
+      score: null,
+      status: "missing",
+      explanation:
+        "Sem momento curatorial nas duas tracks. O momento da track ainda não entrou no cálculo.",
+    };
+  }
+
+  if (currentMoment === nextMoment) {
+    return {
+      id: "timing",
+      title: "Momento da track",
+      officialWeight: 22,
+      effectiveWeight: 22,
+      score: 88,
+      status: "available",
+      explanation: "As duas tracks ocupam o mesmo momento curatorial.",
+    };
+  }
+
+  const strongPairs = new Set([
+    "opening:build",
+    "build:peak",
+    "peak:valley",
+    "valley:contemplation",
+    "contemplation:closing",
+    "valley:build",
+    "build:valley",
+    "peak:contemplation",
+  ]);
+
+  const pair = `${currentMoment}:${nextMoment}`;
+
+  if (strongPairs.has(pair)) {
+    return {
+      id: "timing",
+      title: "Momento da track",
+      officialWeight: 22,
+      effectiveWeight: 22,
+      score: 92,
+      status: "available",
+      explanation: `Boa relação de momento: ${getMomentLabel(currentMoment)} para ${getMomentLabel(nextMoment)}.`,
+    };
+  }
+
+  return {
+    id: "timing",
+    title: "Momento da track",
+    officialWeight: 22,
+    effectiveWeight: 22,
+    score: 52,
+    status: "available",
+    explanation: `Mudança de momento menos previsível: ${getMomentLabel(currentMoment)} para ${getMomentLabel(nextMoment)}.`,
   };
 }
 
 export function calculateTransitionScore(
   currentTrack: ScoreTrack | null | undefined,
-  nextTrack: ScoreTrack | null | undefined
+  nextTrack: ScoreTrack | null | undefined,
+  currentContext?: ScoreTracklistItemContext | null,
+  nextContext?: ScoreTracklistItemContext | null
 ): TransitionScore | null {
   if (!currentTrack || !nextTrack) {
     return null;
   }
 
   const factors: ScoreFactor[] = [
-    getPendingFactor(
-      "narrative",
-      "Narrativa",
-      28,
-      "Ainda depende de marcações de intenção e curva narrativa do projeto."
-    ),
-    getPendingFactor(
-      "timing",
-      "Momento da track",
-      22,
-      "Ainda depende de contexto curatorial: abertura, construção, vale, pico ou encerramento."
-    ),
+    getNarrativeFactor(currentContext, nextContext),
+    getTimingFactor(currentContext, nextContext),
     getHarmonyFactor(currentTrack, nextTrack),
     getEnergyFactor(currentTrack, nextTrack),
     getMoodFactor(currentTrack, nextTrack),

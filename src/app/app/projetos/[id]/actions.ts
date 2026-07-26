@@ -10,21 +10,28 @@ type OrderUpdateItem = {
   newPosition: number;
 };
 
-async function requireUserAndProject(projectId: string) {
+async function requireAuth() {
   const supabase = await createClient();
-
   const { data: authData } = await supabase.auth.getClaims();
-  const claims = authData?.claims ?? null;
 
-  if (!claims?.sub) {
-    throw new Error("Usuário não autenticado.");
+  if (!authData?.claims?.sub) {
+    throw new Error("Não autenticado.");
   }
 
-  const userId = claims.sub;
+  return {
+    supabase,
+    userId: authData.claims.sub,
+  };
+}
 
+async function ensureProjectOwnership(
+  supabase: SupabaseLike,
+  projectId: string,
+  userId: string
+) {
   const { data: project, error } = await supabase
     .from("set_projects")
-    .select("id, user_id")
+    .select("id")
     .eq("id", projectId)
     .eq("user_id", userId)
     .single();
@@ -32,11 +39,8 @@ async function requireUserAndProject(projectId: string) {
   if (error || !project) {
     throw new Error("Projeto não encontrado.");
   }
-
-  return { supabase, userId, project };
 }
 
-// Helper seguro para reordenar múltiplos itens sem violar restrições do banco
 async function applyNewOrder(
   supabase: SupabaseLike,
   projectId: string,
@@ -67,247 +71,373 @@ async function applyNewOrder(
   }
 }
 
-export async function updateSetProject(projectId: string, formData: FormData) {
-  const supabase = await createClient();
-  const { data: authData } = await supabase.auth.getClaims();
-  if (!authData?.claims) throw new Error("Usuário não autenticado.");
-
-  const rawName = formData.get("name");
-  const rawDescription = formData.get("description");
-  const name = typeof rawName === "string" ? rawName.trim() : "";
-  const description = typeof rawDescription === "string" ? rawDescription.trim() : "";
-
-  if (!name) throw new Error("O nome é obrigatório.");
-
-  const { error } = await supabase
-    .from("set_projects")
-    .update({ name, description: description || null })
-    .eq("id", projectId);
-
-  if (error) throw new Error(error.message);
-
-  revalidatePath("/app");
-  revalidatePath(`/app/projetos/${projectId}`);
-}
-
 export async function addCandidate(projectId: string, formData: FormData) {
-  const supabase = await createClient();
-  const { data: authData } = await supabase.auth.getClaims();
-  if (!authData?.claims?.sub) throw new Error("Não autenticado.");
+  const { supabase, userId } = await requireAuth();
 
-  const trackId = String(formData.get("trackId") || "").trim();
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const trackId = String(formData.get("trackId") || "");
   const notes = String(formData.get("notes") || "").trim();
 
-  if (!trackId) throw new Error("Selecione uma track.");
+  if (!trackId) {
+    throw new Error("Selecione uma track.");
+  }
 
   const { error } = await supabase.from("set_candidates").insert({
     project_id: projectId,
     track_id: trackId,
-    user_id: authData.claims.sub,
-    status: "candidate",
     notes: notes || null,
   });
 
-  if (error && error.code !== "23505") throw new Error(error.message);
+  if (error) {
+    throw new Error(error.message);
+  }
+
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
 export async function approveCandidateToTracklist(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
   const projectId = String(formData.get("project_id") || "");
   const trackId = String(formData.get("track_id") || "");
 
-  const { supabase } = await requireUserAndProject(projectId);
-
-  const { data: existing } = await supabase
-    .from("set_tracklist_items")
-    .select("id")
-    .eq("project_id", projectId)
-    .eq("track_id", trackId)
-    .maybeSingle();
-
-  if (!existing) {
-    const { data: lastItem } = await supabase
-      .from("set_tracklist_items")
-      .select("position")
-      .eq("project_id", projectId)
-      .order("position", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const nextPosition = lastItem ? lastItem.position + 1 : 1;
-
-    await supabase.from("set_tracklist_items").insert({
-      project_id: projectId,
-      track_id: trackId,
-      position: nextPosition,
-    });
+  if (!projectId || !trackId) {
+    throw new Error("Dados inválidos.");
   }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { data: existingItems, error: existingError } = await supabase
+    .from("set_tracklist_items")
+    .select("position")
+    .eq("project_id", projectId)
+    .order("position", { ascending: false })
+    .limit(1);
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  const nextPosition = (existingItems?.[0]?.position ?? 0) + 1;
+
+  const { error } = await supabase.from("set_tracklist_items").insert({
+    project_id: projectId,
+    track_id: trackId,
+    position: nextPosition,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
 export async function removeFromTracklist(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
   const projectId = String(formData.get("project_id") || "");
   const tracklistItemId = String(formData.get("tracklist_item_id") || "");
 
-  const { supabase } = await requireUserAndProject(projectId);
+  if (!projectId || !tracklistItemId) {
+    throw new Error("Dados inválidos.");
+  }
 
-  const { data: item } = await supabase
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { error } = await supabase
     .from("set_tracklist_items")
-    .select("id, position")
+    .delete()
     .eq("id", tracklistItemId)
-    .single();
+    .eq("project_id", projectId);
 
-  if (!item) return;
+  if (error) {
+    throw new Error(error.message);
+  }
 
-  await supabase.from("set_tracklist_items").delete().eq("id", tracklistItemId);
-
-  const { data: itemsAfter } = await supabase
+  const { data: remainingItems, error: remainingError } = await supabase
     .from("set_tracklist_items")
-    .select("id, position")
+    .select("id")
     .eq("project_id", projectId)
-    .gt("position", item.position)
     .order("position", { ascending: true });
 
-  if (itemsAfter) {
-    for (const row of itemsAfter) {
-      await supabase.from("set_tracklist_items").update({ position: row.position - 1 }).eq("id", row.id);
-    }
+  if (remainingError) {
+    throw new Error(remainingError.message);
   }
+
+  const reordered = (remainingItems ?? []).map((item, index) => ({
+    id: item.id,
+    newPosition: index + 1,
+  }));
+
+  await applyNewOrder(supabase, projectId, reordered);
+
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
 export async function createFrozenBlock(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
   const projectId = String(formData.get("project_id") || "");
-  const blockName = String(formData.get("block_name") || "Novo Bloco");
-  const selectedItemIds = formData.getAll("selected_items").map(String);
+  const blockName = String(formData.get("block_name") || "").trim();
+  const selectedItems = formData
+    .getAll("selected_items")
+    .map((value) => String(value))
+    .filter(Boolean);
 
-  if (selectedItemIds.length < 2) {
-    throw new Error("Selecione pelo menos 2 tracks para formar um bloco.");
+  if (!projectId || !blockName || selectedItems.length < 2) {
+    throw new Error("Selecione pelo menos duas tracks e dê um nome ao bloco.");
   }
 
-  const { supabase } = await requireUserAndProject(projectId);
+  await ensureProjectOwnership(supabase, projectId, userId);
 
-  const { data: items } = await supabase
-    .from("set_tracklist_items")
-    .select("id, position, block_id")
-    .in("id", selectedItemIds)
-    .eq("project_id", projectId)
-    .order("position", { ascending: true });
-
-  if (!items || items.length !== selectedItemIds.length) throw new Error("Erro ao validar tracks.");
-  
-  if (items.some((i) => i.block_id)) throw new Error("Alguma track já pertence a um bloco.");
-
-  for (let i = 1; i < items.length; i++) {
-    if (items[i].position !== items[i - 1].position + 1) {
-      throw new Error("As tracks selecionadas precisam estar em sequência exata na lista.");
-    }
-  }
-
-  const { data: block } = await supabase
+  const { data: block, error: blockError } = await supabase
     .from("set_blocks")
-    .insert({ project_id: projectId, name: blockName })
+    .insert({
+      project_id: projectId,
+      name: blockName,
+    })
     .select("id")
     .single();
 
-  if (block) {
-    await supabase.from("set_tracklist_items").update({ block_id: block.id }).in("id", selectedItemIds);
+  if (blockError || !block) {
+    throw new Error(blockError?.message || "Erro ao criar bloco.");
   }
+
+  const { error: updateError } = await supabase
+    .from("set_tracklist_items")
+    .update({ block_id: block.id })
+    .in("id", selectedItems)
+    .eq("project_id", projectId);
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
 export async function dissolveFrozenBlock(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
   const projectId = String(formData.get("project_id") || "");
   const blockId = String(formData.get("block_id") || "");
-  const { supabase } = await requireUserAndProject(projectId);
 
-  await supabase.from("set_tracklist_items").update({ block_id: null }).eq("block_id", blockId);
-  await supabase.from("set_blocks").delete().eq("id", blockId);
+  if (!projectId || !blockId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { error: itemsError } = await supabase
+    .from("set_tracklist_items")
+    .update({ block_id: null })
+    .eq("project_id", projectId)
+    .eq("block_id", blockId);
+
+  if (itemsError) {
+    throw new Error(itemsError.message);
+  }
+
+  const { error: blockError } = await supabase
+    .from("set_blocks")
+    .delete()
+    .eq("id", blockId)
+    .eq("project_id", projectId);
+
+  if (blockError) {
+    throw new Error(blockError.message);
+  }
+
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
 export async function moveEntityUp(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
   const projectId = String(formData.get("project_id") || "");
   const entityId = String(formData.get("entity_id") || "");
-  const isBlock = formData.get("is_block") === "true";
+  const isBlock = String(formData.get("is_block") || "") === "true";
 
-  const { supabase } = await requireUserAndProject(projectId);
+  if (!projectId || !entityId) {
+    throw new Error("Dados inválidos.");
+  }
 
-  const { data: allItems } = await supabase
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { data: items, error } = await supabase
     .from("set_tracklist_items")
-    .select("*")
+    .select("id, position, block_id")
     .eq("project_id", projectId)
     .order("position", { ascending: true });
 
-  if (!allItems) return;
+  if (error) {
+    throw new Error(error.message);
+  }
 
-  const aStartIndex = isBlock ? allItems.findIndex((i) => i.block_id === entityId) : allItems.findIndex((i) => i.id === entityId);
-  const aLength = isBlock ? allItems.filter((i) => i.block_id === entityId).length : 1;
+  const rows = items ?? [];
+  const groups: { key: string; itemIds: string[] }[] = [];
+  let currentBlockId: string | null = null;
 
-  if (aStartIndex <= 0) return; // Já está no topo
-
-  const bEndIndex = aStartIndex - 1;
-  let bStartIndex = bEndIndex;
-  const bBlockId = allItems[bEndIndex].block_id;
-
-  if (bBlockId) {
-    while (bStartIndex > 0 && allItems[bStartIndex - 1].block_id === bBlockId) {
-      bStartIndex--;
+  for (const row of rows) {
+    if (row.block_id) {
+      if (row.block_id !== currentBlockId) {
+        currentBlockId = row.block_id;
+        groups.push({
+          key: `block:${row.block_id}`,
+          itemIds: [row.id],
+        });
+      } else {
+        groups[groups.length - 1].itemIds.push(row.id);
+      }
+    } else {
+      currentBlockId = null;
+      groups.push({
+        key: `item:${row.id}`,
+        itemIds: [row.id],
+      });
     }
   }
-  const bLength = bEndIndex - bStartIndex + 1;
 
-  const arrayBefore = allItems.slice(0, bStartIndex);
-  const arrayB = allItems.slice(bStartIndex, bStartIndex + bLength);
-  const arrayA = allItems.slice(aStartIndex, aStartIndex + aLength);
-  const arrayAfter = allItems.slice(aStartIndex + aLength);
+  const targetKey = isBlock ? `block:${entityId}` : `item:${entityId}`;
+  const currentIndex = groups.findIndex((group) => group.key === targetKey);
 
-  const newArray = [...arrayBefore, ...arrayA, ...arrayB, ...arrayAfter];
-  const updates = newArray.map((item, index) => ({ id: item.id, newPosition: index + 1 }));
+  if (currentIndex <= 0) {
+    revalidatePath(`/app/projetos/${projectId}`);
+    return;
+  }
 
-  await applyNewOrder(supabase, projectId, updates);
+  const reorderedGroups = [...groups];
+  [reorderedGroups[currentIndex - 1], reorderedGroups[currentIndex]] = [
+    reorderedGroups[currentIndex],
+    reorderedGroups[currentIndex - 1],
+  ];
+
+  const flattenedIds = reorderedGroups.flatMap((group) => group.itemIds);
+  const newOrderArray = flattenedIds.map((id, index) => ({
+    id,
+    newPosition: index + 1,
+  }));
+
+  await applyNewOrder(supabase, projectId, newOrderArray);
+
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
 export async function moveEntityDown(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
   const projectId = String(formData.get("project_id") || "");
   const entityId = String(formData.get("entity_id") || "");
-  const isBlock = formData.get("is_block") === "true";
+  const isBlock = String(formData.get("is_block") || "") === "true";
 
-  const { supabase } = await requireUserAndProject(projectId);
+  if (!projectId || !entityId) {
+    throw new Error("Dados inválidos.");
+  }
 
-  const { data: allItems } = await supabase
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { data: items, error } = await supabase
     .from("set_tracklist_items")
-    .select("*")
+    .select("id, position, block_id")
     .eq("project_id", projectId)
     .order("position", { ascending: true });
 
-  if (!allItems) return;
+  if (error) {
+    throw new Error(error.message);
+  }
 
-  const aStartIndex = isBlock ? allItems.findIndex((i) => i.block_id === entityId) : allItems.findIndex((i) => i.id === entityId);
-  const aLength = isBlock ? allItems.filter((i) => i.block_id === entityId).length : 1;
+  const rows = items ?? [];
+  const groups: { key: string; itemIds: string[] }[] = [];
+  let currentBlockId: string | null = null;
 
-  if (aStartIndex === -1 || aStartIndex + aLength >= allItems.length) return; // Já está no fim
-
-  const bStartIndex = aStartIndex + aLength;
-  let bEndIndex = bStartIndex;
-  const bBlockId = allItems[bStartIndex].block_id;
-
-  if (bBlockId) {
-    while (bEndIndex < allItems.length - 1 && allItems[bEndIndex + 1].block_id === bBlockId) {
-      bEndIndex++;
+  for (const row of rows) {
+    if (row.block_id) {
+      if (row.block_id !== currentBlockId) {
+        currentBlockId = row.block_id;
+        groups.push({
+          key: `block:${row.block_id}`,
+          itemIds: [row.id],
+        });
+      } else {
+        groups[groups.length - 1].itemIds.push(row.id);
+      }
+    } else {
+      currentBlockId = null;
+      groups.push({
+        key: `item:${row.id}`,
+        itemIds: [row.id],
+      });
     }
   }
-  const bLength = bEndIndex - bStartIndex + 1;
 
-  const arrayBefore = allItems.slice(0, aStartIndex);
-  const arrayA = allItems.slice(aStartIndex, aStartIndex + aLength);
-  const arrayB = allItems.slice(bStartIndex, bStartIndex + bLength);
-  const arrayAfter = allItems.slice(bStartIndex + bLength);
+  const targetKey = isBlock ? `block:${entityId}` : `item:${entityId}`;
+  const currentIndex = groups.findIndex((group) => group.key === targetKey);
 
-  const newArray = [...arrayBefore, ...arrayB, ...arrayA, ...arrayAfter];
-  const updates = newArray.map((item, index) => ({ id: item.id, newPosition: index + 1 }));
+  if (currentIndex === -1 || currentIndex >= groups.length - 1) {
+    revalidatePath(`/app/projetos/${projectId}`);
+    return;
+  }
 
-  await applyNewOrder(supabase, projectId, updates);
+  const reorderedGroups = [...groups];
+  [reorderedGroups[currentIndex], reorderedGroups[currentIndex + 1]] = [
+    reorderedGroups[currentIndex + 1],
+    reorderedGroups[currentIndex],
+  ];
+
+  const flattenedIds = reorderedGroups.flatMap((group) => group.itemIds);
+  const newOrderArray = flattenedIds.map((id, index) => ({
+    id,
+    newPosition: index + 1,
+  }));
+
+  await applyNewOrder(supabase, projectId, newOrderArray);
+
+  revalidatePath(`/app/projetos/${projectId}`);
+}
+
+export async function updateCuratorialFields(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
+  const projectId = String(formData.get("project_id") || "");
+  const tracklistItemId = String(formData.get("tracklist_item_id") || "");
+  const curatorialMomentRaw = String(
+    formData.get("curatorial_moment") || ""
+  ).trim();
+
+  if (!projectId || !tracklistItemId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const curatorialMoment = curatorialMomentRaw || null;
+
+  const allowedMoments = new Set([
+    "opening",
+    "build",
+    "valley",
+    "peak",
+    "contemplation",
+    "closing",
+  ]);
+
+  if (curatorialMoment && !allowedMoments.has(curatorialMoment)) {
+    throw new Error("Momento curatorial inválido.");
+  }
+
+  const { error } = await supabase
+    .from("set_tracklist_items")
+    .update({
+      curatorial_moment: curatorialMoment,
+    })
+    .eq("id", tracklistItemId)
+    .eq("project_id", projectId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
   revalidatePath(`/app/projetos/${projectId}`);
 }
