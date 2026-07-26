@@ -69,7 +69,6 @@ function getTrackFromRelation(
   if (Array.isArray(relation)) {
     return relation[0] ?? null;
   }
-
   return relation ?? null;
 }
 
@@ -81,19 +80,12 @@ function getScoreToneClasses(score: TransitionScore) {
     rose: "border-rose-300/30 bg-rose-300/10 text-rose-100",
     slate: "border-white/10 bg-white/[0.03] text-slate-200",
   };
-
   return tones[score.tone];
 }
 
 function getFactorStatusLabel(status: "available" | "missing" | "pending") {
-  if (status === "available") {
-    return "Calculado";
-  }
-
-  if (status === "missing") {
-    return "Dado ausente";
-  }
-
+  if (status === "available") return "Calculado";
+  if (status === "missing") return "Dado ausente";
   return "Aguardando contexto";
 }
 
@@ -106,24 +98,135 @@ function getMomentLabel(moment: CuratorialMoment | null) {
     contemplation: "Contemplação",
     closing: "Encerramento",
   };
-
-  if (!moment) {
-    return "Sem momento";
-  }
-
+  if (!moment) return "Sem momento";
   return labels[moment];
 }
 
 function getContextFromItem(
   item: TracklistItem | null | undefined
 ): ScoreTracklistItemContext | null {
-  if (!item) {
-    return null;
-  }
-
+  if (!item) return null;
   return {
     curatorial_moment: item.curatorial_moment,
   };
+}
+
+function MixBrainLegend() {
+  return (
+    <details className="group mb-8 overflow-hidden rounded-3xl border border-indigo-500/30 bg-indigo-500/[0.03]">
+      <summary className="flex cursor-pointer items-center justify-between p-6 font-black tracking-tight text-indigo-100 transition hover:bg-indigo-500/[0.05]">
+        <div className="flex items-center gap-3">
+          <span className="text-xl">🧠</span>
+          <span className="text-lg">Como o MixBrain avalia seu set? (Glossário Rápido)</span>
+        </div>
+        <span className="text-indigo-400 transition-transform group-open:rotate-180">
+          ▼
+        </span>
+      </summary>
+
+      <div className="border-t border-indigo-500/20 p-6 sm:p-8">
+        <div className="grid gap-8 md:grid-cols-3">
+          {/* Rótulos */}
+          <div>
+            <h4 className="mb-4 text-xs font-bold uppercase tracking-widest text-indigo-300">
+              Os Rótulos
+            </h4>
+            <ul className="space-y-3 text-sm">
+              <li className="flex items-start gap-3">
+                <span className="mt-0.5 rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2 py-0.5 text-[10px] font-bold text-emerald-100">
+                  EXCELENTE
+                </span>
+                <span className="text-slate-300">
+                  85% a 100%. Transição perfeita e sem atrito.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="mt-0.5 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-bold text-cyan-100">
+                  BOA
+                </span>
+                <span className="text-slate-300">
+                  70% a 84%. Mixável e funcional narrativamente.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="mt-0.5 rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-[10px] font-bold text-amber-100">
+                  ATENÇÃO
+                </span>
+                <span className="text-slate-300">
+                  55% a 69%. Exige técnica, ponte ou pausa de respiro.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="mt-0.5 rounded-full border border-rose-300/30 bg-rose-300/10 px-2 py-0.5 text-[10px] font-bold text-rose-100">
+                  FRACA
+                </span>
+                <span className="text-slate-300">
+                  Abaixo de 55%. Alto risco de choque de energia ou harmonia.
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          {/* Momentos Curatoriais */}
+          <div>
+            <h4 className="mb-4 text-xs font-bold uppercase tracking-widest text-indigo-300">
+              Momentos Curatoriais
+            </h4>
+            <ul className="space-y-2 text-sm text-slate-300">
+              <li>
+                <strong className="text-slate-100">Abertura:</strong> Introdução do set, clima inicial.
+              </li>
+              <li>
+                <strong className="text-slate-100">Construção:</strong> Elevando a energia, preparando o terreno.
+              </li>
+              <li>
+                <strong className="text-slate-100">Vale:</strong> Respiro, quebra de expectativa ou tensão pré-pico.
+              </li>
+              <li>
+                <strong className="text-slate-100">Pico:</strong> Clímax, catarse, maior entrega de energia.
+              </li>
+              <li>
+                <strong className="text-slate-100">Contemplação:</strong> Densidade emocional, viagem sonora reflexiva.
+              </li>
+              <li>
+                <strong className="text-slate-100">Encerramento:</strong> Desfecho e conclusão da narrativa.
+              </li>
+            </ul>
+          </div>
+
+          {/* Os 7 Fatores */}
+          <div>
+            <h4 className="mb-4 text-xs font-bold uppercase tracking-widest text-indigo-300">
+              Os 7 Fatores (Pesos)
+            </h4>
+            <ul className="space-y-1.5 text-sm text-slate-300">
+              <li>
+                <strong className="text-slate-100">Narrativa (28%):</strong> Coerência da jornada.
+              </li>
+              <li>
+                <strong className="text-slate-100">Timing/Momento (22%):</strong> Relação da track com a fase do set.
+              </li>
+              <li>
+                <strong className="text-slate-100">Harmonia (16%):</strong> Transições no círculo de Camelot.
+              </li>
+              <li>
+                <strong className="text-slate-100">Energia (13%):</strong> Controle de choques ou continuidades.
+              </li>
+              <li>
+                <strong className="text-slate-100">Mood (9%):</strong> Texturas compartilhadas.
+              </li>
+              <li>
+                <strong className="text-slate-100">BPM (7%):</strong> Diferença percentual de tempo.
+              </li>
+              <li>
+                <strong className="text-slate-100">Diversidade (5%):</strong> Variação inteligente de artistas.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </details>
+  );
 }
 
 function TransitionScoreCard({
@@ -131,9 +234,7 @@ function TransitionScoreCard({
 }: {
   score: TransitionScore | null;
 }) {
-  if (!score) {
-    return null;
-  }
+  if (!score) return null;
 
   return (
     <details className={`rounded-xl border p-3 ${getScoreToneClasses(score)}`}>
@@ -195,13 +296,6 @@ function TransitionScoreCard({
             </div>
           ))}
         </div>
-
-        <Link
-          href="/app/glossario"
-          className="mt-4 inline-flex text-xs font-bold underline underline-offset-4 transition hover:opacity-75"
-        >
-          Entender pesos e regras no glossário
-        </Link>
       </div>
     </details>
   );
@@ -361,7 +455,6 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             : item.set_blocks?.name || "Bloco",
           items: [item],
         };
-
         groupedItems.push(currentBlock);
       } else {
         currentBlock.items.push(item);
@@ -386,7 +479,6 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-300 font-black text-slate-950">
               M
             </div>
-
             <div>
               <p className="font-bold tracking-tight">MixBrain</p>
               <p className="text-xs text-slate-400">Projeto de set</p>
@@ -400,14 +492,12 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             >
               Workspace
             </Link>
-
             <Link
               href="/app/glossario"
               className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
             >
               Glossário
             </Link>
-
             <LogoutButton />
           </div>
         </div>
@@ -418,7 +508,6 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
             Projeto
           </p>
-
           <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-5xl">
             {project.name}
           </h1>
@@ -436,6 +525,8 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
       </section>
 
       <section className="mx-auto max-w-7xl px-6 py-12 sm:px-10 lg:px-12">
+        <MixBrainLegend />
+
         <div className="grid gap-8 lg:grid-cols-2">
           <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
             <div className="flex items-center justify-between gap-4">
@@ -443,12 +534,10 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
                   Candidatas
                 </p>
-
                 <h2 className="mt-2 text-2xl font-black tracking-tight">
                   Tracks disponíveis
                 </h2>
               </div>
-
               <span className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-300">
                 {pendingCandidates.length}
               </span>
@@ -466,7 +555,6 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                   required
                 >
                   <option value="">Selecione uma track...</option>
-
                   {availableTracks.map((track) => (
                     <option key={track.id} value={track.id}>
                       {track.title} {track.artist ? `- ${track.artist}` : ""}
@@ -501,9 +589,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                     ? candidate.tracks[0]
                     : candidate.tracks;
 
-                  if (!track) {
-                    return null;
-                  }
+                  if (!track) return null;
 
                   return (
                     <article
@@ -558,7 +644,6 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
                   Tracklist
                 </p>
-
                 <h2 className="mt-2 text-2xl font-black tracking-tight">
                   Sequência e Blocos
                 </h2>
@@ -607,7 +692,6 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                             <span className="font-bold tracking-tight text-indigo-400">
                               ❄️ {group.block_name}
                             </span>
-
                             <span className="text-xs text-indigo-400/50">
                               {group.items.length} tracks
                             </span>
@@ -656,10 +740,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                         <div className="space-y-3">
                           {group.items.map((item, itemIndex) => {
                             const track = getTrackFromRelation(item.tracks);
-
-                            if (!track) {
-                              return null;
-                            }
+                            if (!track) return null;
 
                             const nextItem = group.items[itemIndex + 1];
                             const nextTrack = nextItem
@@ -721,10 +802,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                   }
 
                   const track = getTrackFromRelation(group.item.tracks);
-
-                  if (!track) {
-                    return null;
-                  }
+                  if (!track) return null;
 
                   const nextGroup = groupedItems[index + 1];
                   let nextTrack: ScoreTrack | null = null;
