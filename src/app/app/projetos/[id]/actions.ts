@@ -442,10 +442,11 @@ export async function updateCuratorialFields(formData: FormData) {
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
-export async function updateSetProject(formData: FormData) {
+export async function updateSetProject(
+  projectId: string,
+  formData: FormData
+) {
   const { supabase, userId } = await requireAuth();
-
-  const projectId = String(formData.get("project_id") || "");
 
   const name = String(formData.get("name") || "").trim();
   const description = String(formData.get("description") || "").trim();
