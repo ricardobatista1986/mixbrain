@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Papa from "papaparse";
 import Link from "next/link";
-import { importTracksFromCsvToProject } from "./server-actions";
+import { importTracksFromCsv } from "./server-actions";
 
 type RawCsvRow = Record<string, string>;
 
