@@ -9,7 +9,7 @@ type RawCsvRow = Record<string, string>;
 
 type ParsedRow = {
   title: string;
-  artist: string | null;
+  artist: string;
   bpm: number | null;
   musical_key: string | null;
   energy: number | null;
