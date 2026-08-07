@@ -67,14 +67,15 @@ function guessMapping(headers: string[]): MappingState {
     return found ?? "";
   }
 
+  // Aqui nós ensinamos o vocabulário do Chosic para o sistema
   return {
-    title: findHeader(["title", "track", "track_title", "name"]),
-    artist: findHeader(["artist", "artists"]),
+    title: findHeader(["title", "track", "track_title", "name", "song", "titulo", "título"]),
+    artist: findHeader(["artist", "artists", "artista"]),
     bpm: findHeader(["bpm"]),
-    musical_key: findHeader(["musical_key", "key", "camelot"]),
-    energy: findHeader(["energy"]),
-    mood: findHeader(["mood"]),
-    notes: findHeader(["notes", "comment", "comments"]),
+    musical_key: findHeader(["musical_key", "key", "camelot", "chave"]),
+    energy: findHeader(["energy", "energia"]),
+    mood: findHeader(["mood", "genres", "genre", "parent genres"]),
+    notes: findHeader(["notes", "comment", "comments", "notas"]),
   };
 }
 
@@ -120,7 +121,8 @@ function buildParsedRows(
 
       const parsedEnergy = toNullableNumber(energy);
 
-      if (parsedEnergy !== null && (parsedEnergy < 1 || parsedEnergy > 10)) {
+      // Correção: Agora a energia pode ser de 0 a 100
+      if (parsedEnergy !== null && (parsedEnergy < 0 || parsedEnergy > 100)) {
         invalidCount += 1;
         return null;
       }
@@ -375,7 +377,7 @@ export default function ImportarCsvClientPage({
         <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
           <h2 className="text-2xl font-black tracking-tight">3. Mapeamento de colunas</h2>
           <p className="mt-2 text-sm text-slate-400">
-            Confirme quais colunas do CSV correspondem aos campos do MixBrain.
+            Confirme quais colunas do CSV correspondem aos campos do MixBrain. Título é obrigatório. Energia deve estar entre 0 e 100.
           </p>
 
           {headers.length === 0 ? (
@@ -452,14 +454,14 @@ export default function ImportarCsvClientPage({
               <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
                 Linhas válidas
               </p>
-              <p className="mt-2 text-3xl font-black">{processed.validRows.length}</p>
+              <p className="mt-2 text-3xl font-black text-emerald-400">{processed.validRows.length}</p>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
                 Inválidas
               </p>
-              <p className="mt-2 text-3xl font-black">{processed.invalidCount}</p>
+              <p className="mt-2 text-3xl font-black text-rose-400">{processed.invalidCount}</p>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
@@ -513,16 +515,6 @@ export default function ImportarCsvClientPage({
               Mostrando 10 de {processed.uniqueRows.length} linhas prontas para importação.
             </p>
           ) : null}
-        </div>
-
-        <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-          <h2 className="text-2xl font-black tracking-tight">Exemplo de CSV</h2>
-          <pre className="mt-4 overflow-x-auto rounded-2xl border border-white/10 bg-slate-900/70 p-4 text-xs text-slate-300">
-{`title,artist,bpm,musical_key,energy,mood,notes
-Track A,Artist A,124,8A,6,hypnotic,opening tool
-Track B,Artist B,126,8B,7,dark peak,main lift
-Track C,Artist C,123,7A,5,deep,respiro`}
-          </pre>
         </div>
       </section>
     </main>
