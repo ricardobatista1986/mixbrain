@@ -40,7 +40,7 @@ function chunkArray<T>(items: T[], size: number) {
   return chunks;
 }
 
-export async function importTracksFromCsvToProject(
+export async function importTracksFromCsv(
   rows: ImportRow[],
   projectId: string
 ) {
