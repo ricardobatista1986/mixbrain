@@ -273,7 +273,7 @@ export default function ImportarCsvClientPage({
     }
 
     startTransition(async () => {
-      const result = await importTracksFromCsvToProject(
+      const result = await importTracksFromCsv(
         processed.uniqueRows,
         projectId
       );
