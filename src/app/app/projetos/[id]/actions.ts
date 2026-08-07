@@ -441,3 +441,85 @@ export async function updateCuratorialFields(formData: FormData) {
 
   revalidatePath(`/app/projetos/${projectId}`);
 }
+
+export async function updateSetProject(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
+  const projectId = String(formData.get("project_id") || "");
+
+  const name = String(formData.get("name") || "").trim();
+  const description = String(formData.get("description") || "").trim();
+
+  const targetDurationRaw = String(
+    formData.get("target_duration_minutes") || ""
+  ).trim();
+
+  const bpmMinRaw = String(formData.get("bpm_min") || "").trim();
+  const bpmMaxRaw = String(formData.get("bpm_max") || "").trim();
+
+  const narrativeBrief = String(
+    formData.get("narrative_brief") || ""
+  ).trim();
+
+  if (!projectId) {
+    throw new Error("Projeto inválido.");
+  }
+
+  if (!name) {
+    throw new Error("Informe o nome do projeto.");
+  }
+
+  const targetDuration = targetDurationRaw
+    ? Number(targetDurationRaw)
+    : null;
+
+  const bpmMin = bpmMinRaw ? Number(bpmMinRaw) : null;
+  const bpmMax = bpmMaxRaw ? Number(bpmMaxRaw) : null;
+
+  if (
+    targetDuration !== null &&
+    (!Number.isFinite(targetDuration) || targetDuration <= 0)
+  ) {
+    throw new Error("A duração precisa ser maior que zero.");
+  }
+
+  if (
+    bpmMin !== null &&
+    (!Number.isFinite(bpmMin) || bpmMin < 40 || bpmMin > 250)
+  ) {
+    throw new Error("O BPM mínimo deve estar entre 40 e 250.");
+  }
+
+  if (
+    bpmMax !== null &&
+    (!Number.isFinite(bpmMax) || bpmMax < 40 || bpmMax > 250)
+  ) {
+    throw new Error("O BPM máximo deve estar entre 40 e 250.");
+  }
+
+  if (bpmMin !== null && bpmMax !== null && bpmMin > bpmMax) {
+    throw new Error("O BPM mínimo não pode ser maior que o BPM máximo.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { error } = await supabase
+    .from("set_projects")
+    .update({
+      name,
+      description: description || null,
+      target_duration_minutes: targetDuration,
+      bpm_min: bpmMin,
+      bpm_max: bpmMax,
+      narrative_brief: narrativeBrief || null,
+    })
+    .eq("id", projectId)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/app");
+  revalidatePath(`/app/projetos/${projectId}`);
+}
