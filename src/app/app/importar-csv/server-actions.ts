@@ -236,3 +236,26 @@ export async function importTracksFromCsv(
       `${alreadyCandidateCount} já estava(m) neste projeto.`,
   };
 }
+
+export async function listImportProjects() {
+  const supabase = await createClient();
+
+  const { data: authData } = await supabase.auth.getClaims();
+  const userId = authData?.claims?.sub;
+
+  if (!userId) {
+    return [];
+  }
+
+  const { data: projects, error } = await supabase
+    .from("set_projects")
+    .select("id, name")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return projects ?? [];
+}
