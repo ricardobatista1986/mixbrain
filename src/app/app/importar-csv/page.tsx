@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import Papa from "papaparse";
 import Link from "next/link";
-import { importTracksFromCsv } from "./server-actions";
+import Papa from "papaparse";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { importTracksFromCsv, listImportProjects } from "./server-actions";
 
 type RawCsvRow = Record<string, string>;
 
@@ -17,6 +17,11 @@ type ParsedRow = {
   notes: string | null;
 };
 
+type ImportProject = {
+  id: string;
+  name: string;
+};
+
 type MappingState = {
   title: string;
   artist: string;
@@ -27,7 +32,17 @@ type MappingState = {
   notes: string;
 };
 
-const TARGET_FIELDS: Array<keyof MappingState> = [
+const emptyMapping: MappingState = {
+  title: "",
+  artist: "",
+  bpm: "",
+  musical_key: "",
+  energy: "",
+  mood: "",
+  notes: "",
+};
+
+const fields: Array<keyof MappingState> = [
   "title",
   "artist",
   "bpm",
@@ -37,192 +52,139 @@ const TARGET_FIELDS: Array<keyof MappingState> = [
   "notes",
 ];
 
-const FIELD_LABELS: Record<keyof MappingState, string> = {
+const labels: Record<keyof MappingState, string> = {
   title: "Título",
   artist: "Artista",
   bpm: "BPM",
-  musical_key: "Key Camelot",
+  musical_key: "Key / Camelot",
   energy: "Energia",
   mood: "Mood",
   notes: "Notas",
 };
 
-function normalizeHeader(header: string) {
-  return header.trim().toLowerCase();
+function clean(value: string) {
+  const output = value.trim();
+  return output || null;
 }
 
-function guessMapping(headers: string[]): MappingState {
-  function findHeader(possibleNames: string[]) {
-    const found = headers.find((header) =>
-      possibleNames.some(
-        (possible) => normalizeHeader(header) === normalizeHeader(possible)
-      )
-    );
+function numberOrNull(value: string) {
+  const normalized = value.trim().replace(",", ".");
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
-    return found ?? "";
-  }
+function headerMatch(headers: string[], options: string[]) {
+  return (
+    headers.find((header) =>
+      options.includes(header.trim().toLocaleLowerCase())
+    ) ?? ""
+  );
+}
 
+function detectMapping(headers: string[]): MappingState {
   return {
-    title: findHeader(["title", "track", "track_title", "name"]),
-    artist: findHeader(["artist", "artists"]),
-    bpm: findHeader(["bpm"]),
-    musical_key: findHeader(["musical_key", "key", "camelot"]),
-    energy: findHeader(["energy"]),
-    mood: findHeader(["mood"]),
-    notes: findHeader(["notes", "comment", "comments"]),
+    title: headerMatch(headers, ["title", "track", "track_title", "name", "titulo", "título"]),
+    artist: headerMatch(headers, ["artist", "artists", "artista"]),
+    bpm: headerMatch(headers, ["bpm"]),
+    musical_key: headerMatch(headers, ["musical_key", "key", "camelot", "chave"]),
+    energy: headerMatch(headers, ["energy", "energia"]),
+    mood: headerMatch(headers, ["mood"]),
+    notes: headerMatch(headers, ["notes", "note", "comment", "comments", "notas"]),
   };
 }
 
-function toNullableString(value: string) {
-  const cleaned = value.trim();
-  return cleaned ? cleaned : null;
-}
-
-function toNullableNumber(value: string) {
-  const cleaned = value.trim().replace(",", ".");
-
-  if (!cleaned) return null;
-
-  const parsed = Number(cleaned);
-
-  if (Number.isNaN(parsed)) return null;
-
-  return parsed;
-}
-
-function buildParsedRows(
-  sourceRows: RawCsvRow[],
-  mapping: MappingState
-): { validRows: ParsedRow[]; invalidCount: number } {
+function parseRows(rows: RawCsvRow[], mapping: MappingState) {
   let invalidCount = 0;
-
-  const validRows = sourceRows
+  const parsed = rows
     .map((row) => {
-      const title = mapping.title ? String(row[mapping.title] ?? "").trim() : "";
-      const artist = mapping.artist ? String(row[mapping.artist] ?? "").trim() : "";
-      const bpm = mapping.bpm ? String(row[mapping.bpm] ?? "").trim() : "";
-      const musicalKey = mapping.musical_key
-        ? String(row[mapping.musical_key] ?? "").trim()
-        : "";
-      const energy = mapping.energy ? String(row[mapping.energy] ?? "").trim() : "";
-      const mood = mapping.mood ? String(row[mapping.mood] ?? "").trim() : "";
-      const notes = mapping.notes ? String(row[mapping.notes] ?? "").trim() : "";
+      const value = (field: keyof MappingState) =>
+        mapping[field] ? String(row[mapping[field]] ?? "").trim() : "";
+      const title = value("title");
+      const artist = value("artist");
+      const energy = numberOrNull(value("energy"));
 
-      if (!title) {
-        invalidCount += 1;
-        return null;
-      }
-
-      const parsedEnergy = toNullableNumber(energy);
-
-      if (parsedEnergy !== null && (parsedEnergy < 1 || parsedEnergy > 10)) {
+      if (!title || !artist || (energy !== null && (energy < 1 || energy > 10))) {
         invalidCount += 1;
         return null;
       }
 
       return {
         title,
-        artist: toNullableString(artist),
-        bpm: toNullableNumber(bpm),
-        musical_key: toNullableString(musicalKey),
-        energy: parsedEnergy,
-        mood: toNullableString(mood),
-        notes: toNullableString(notes),
+        artist,
+        bpm: numberOrNull(value("bpm")),
+        musical_key: clean(value("musical_key")),
+        energy,
+        mood: clean(value("mood")),
+        notes: clean(value("notes")),
       };
     })
     .filter((row): row is ParsedRow => row !== null);
 
-  return { validRows, invalidCount };
-}
-
-function dedupeRows(rows: ParsedRow[]) {
   const seen = new Set<string>();
-  const unique: ParsedRow[] = [];
-  let duplicates = 0;
-
-  for (const row of rows) {
-    const key = `${row.title.trim().toLowerCase()}::${(row.artist ?? "")
-      .trim()
-      .toLowerCase()}`;
-
+  let duplicateCount = 0;
+  const uniqueRows = parsed.filter((row) => {
+    const key = `${row.title.toLocaleLowerCase()}::${row.artist?.toLocaleLowerCase()}`;
     if (seen.has(key)) {
-      duplicates += 1;
-      continue;
+      duplicateCount += 1;
+      return false;
     }
-
     seen.add(key);
-    unique.push(row);
-  }
+    return true;
+  });
 
-  return {
-    uniqueRows: unique,
-    duplicateCount: duplicates,
-  };
+  return { invalidCount, duplicateCount, uniqueRows };
 }
 
 export default function ImportarCsvPage() {
+  const [projects, setProjects] = useState<ImportProject[]>([]);
+  const [projectId, setProjectId] = useState("");
   const [fileName, setFileName] = useState("");
   const [headers, setHeaders] = useState<string[]>([]);
   const [rawRows, setRawRows] = useState<RawCsvRow[]>([]);
-  const [mapping, setMapping] = useState<MappingState>({
-    title: "",
-    artist: "",
-    bpm: "",
-    musical_key: "",
-    energy: "",
-    mood: "",
-    notes: "",
-  });
+  const [mapping, setMapping] = useState<MappingState>(emptyMapping);
   const [error, setError] = useState("");
-  const [resultMessage, setResultMessage] = useState("");
+  const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  function resetState() {
+  useEffect(() => {
+    void listImportProjects().then((items) => {
+      setProjects(items);
+      if (items.length === 1) setProjectId(items[0].id);
+    });
+  }, []);
+
+  const processed = useMemo(
+    () => parseRows(rawRows, mapping),
+    [rawRows, mapping]
+  );
+
+  function resetCsv() {
+    setFileName("");
     setHeaders([]);
     setRawRows([]);
-    setMapping({
-      title: "",
-      artist: "",
-      bpm: "",
-      musical_key: "",
-      energy: "",
-      mood: "",
-      notes: "",
-    });
+    setMapping(emptyMapping);
   }
 
-  function handleFileChange(file: File | null) {
+  function handleFile(file: File | null) {
     setError("");
-    setResultMessage("");
-    resetState();
-
-    if (!file) {
-      setFileName("");
-      return;
-    }
+    setMessage("");
+    resetCsv();
+    if (!file) return;
 
     setFileName(file.name);
-
     Papa.parse<RawCsvRow>(file, {
       header: true,
       skipEmptyLines: true,
-      complete(results) {
-        const parsedRows = results.data ?? [];
-        const metaFields = (results.meta.fields ?? []).filter(Boolean);
-
-        if (!metaFields.length) {
-          setError("O CSV não possui cabeçalhos válidos.");
+      complete(result) {
+        const parsedHeaders = (result.meta.fields ?? []).filter(Boolean);
+        if (!parsedHeaders.length || !result.data.length) {
+          setError("O CSV deve conter cabeçalhos e pelo menos uma linha de dados.");
           return;
         }
-
-        if (!parsedRows.length) {
-          setError("O CSV não possui linhas de dados.");
-          return;
-        }
-
-        setHeaders(metaFields);
-        setRawRows(parsedRows);
-        setMapping(guessMapping(metaFields));
+        setHeaders(parsedHeaders);
+        setRawRows(result.data);
+        setMapping(detectMapping(parsedHeaders));
       },
       error(parseError) {
         setError(`Erro ao ler CSV: ${parseError.message}`);
@@ -230,44 +192,31 @@ export default function ImportarCsvPage() {
     });
   }
 
-  const processed = useMemo(() => {
-    const { validRows, invalidCount } = buildParsedRows(rawRows, mapping);
-    const { uniqueRows, duplicateCount } = dedupeRows(validRows);
-
-    return {
-      validRows,
-      invalidCount,
-      duplicateCount,
-      uniqueRows,
-      previewRows: uniqueRows.slice(0, 10),
-    };
-  }, [rawRows, mapping]);
-
-  async function handleImport() {
+  function handleImport() {
     setError("");
-    setResultMessage("");
+    setMessage("");
 
-    if (!mapping.title) {
-      setError("Você precisa mapear a coluna de título.");
+    if (!projectId) {
+      setError("Selecione o projeto que receberá as candidatas.");
       return;
     }
-
-    if (processed.uniqueRows.length === 0) {
-      setError("Nenhuma linha válida restou para importar.");
+    if (!mapping.title || !mapping.artist) {
+      setError("Mapeie as colunas de título e artista.");
+      return;
+    }
+    if (!processed.uniqueRows.length) {
+      setError("Não há linhas válidas para importar.");
       return;
     }
 
     startTransition(async () => {
-      const result = await importTracksFromCsv(processed.uniqueRows);
-
+      const result = await importTracksFromCsv(processed.uniqueRows, projectId);
       if (!result.ok) {
         setError(result.message);
         return;
       }
-
-      setResultMessage(result.message);
-      setFileName("");
-      resetState();
+      setMessage(result.message);
+      resetCsv();
     });
   }
 
@@ -275,216 +224,87 @@ export default function ImportarCsvPage() {
     <main className="min-h-screen bg-slate-950 text-slate-100">
       <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,_rgba(34,211,238,0.14),_transparent_40%)]">
         <div className="mx-auto max-w-6xl px-6 py-14 sm:px-10 lg:px-12">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
-            Biblioteca
-          </p>
-          <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-5xl">
-            Importar tracks por CSV
-          </h1>
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">Biblioteca</p>
+          <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-5xl">Importar tracks por CSV</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-300">
-            Faça upload do seu catálogo, mapeie colunas, revise o preview e
-            importe em lote com deduplicação.
+            Selecione o projeto de destino. Tracks existentes serão reutilizadas; novas tracks serão criadas e todas entrarão automaticamente como candidatas do projeto.
           </p>
-
-          <div className="mt-6">
-            <Link
-              href="/app"
-              className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
-            >
-              Voltar ao workspace
-            </Link>
-          </div>
+          <Link href="/app" className="mt-6 inline-block rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100">
+            Voltar ao workspace
+          </Link>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 py-10 sm:px-10 lg:px-12">
+      <section className="mx-auto max-w-6xl space-y-8 px-6 py-10 sm:px-10 lg:px-12">
         <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-          <h2 className="text-2xl font-black tracking-tight">1. Upload</h2>
-          <p className="mt-2 text-sm text-slate-400">
-            Envie um CSV com cabeçalho. O sistema tentará reconhecer as colunas automaticamente.
-          </p>
-
-          <div className="mt-6">
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-              className="block w-full rounded-xl border border-white/10 bg-slate-900 p-3 text-sm text-slate-200"
-            />
+          <h2 className="text-2xl font-black">1. Projeto e arquivo</h2>
+          <div className="mt-5 grid gap-5 md:grid-cols-2">
+            <label className="text-sm font-semibold text-slate-300">
+              Projeto de destino
+              <select value={projectId} onChange={(event) => setProjectId(event.target.value)} className="mt-2 block w-full rounded-xl border border-white/10 bg-slate-900 p-3 text-slate-100">
+                <option value="">Selecione um projeto</option>
+                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              </select>
+            </label>
+            <label className="text-sm font-semibold text-slate-300">
+              Arquivo CSV
+              <input type="file" accept=".csv,text/csv" onChange={(event) => handleFile(event.target.files?.[0] ?? null)} className="mt-2 block w-full rounded-xl border border-white/10 bg-slate-900 p-3 text-sm text-slate-200" />
+            </label>
           </div>
-
-          {fileName ? (
-            <p className="mt-3 text-sm text-slate-300">
-              Arquivo carregado: {fileName}
-            </p>
-          ) : null}
-
-          {error ? (
-            <div className="mt-4 rounded-xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-200">
-              {error}
-            </div>
-          ) : null}
-
-          {resultMessage ? (
-            <div className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-200">
-              {resultMessage}
-            </div>
-          ) : null}
+          {!projects.length ? <p className="mt-4 text-sm text-amber-200">Crie um projeto no workspace antes de importar.</p> : null}
+          {fileName ? <p className="mt-4 text-sm text-slate-300">Arquivo carregado: {fileName}</p> : null}
+          {error ? <p className="mt-4 rounded-xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-200">{error}</p> : null}
+          {message ? <p className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-200">{message}</p> : null}
         </div>
 
-        <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-          <h2 className="text-2xl font-black tracking-tight">2. Mapeamento de colunas</h2>
-          <p className="mt-2 text-sm text-slate-400">
-            Confirme quais colunas do CSV correspondem aos campos do MixBrain.
-          </p>
-
-          {headers.length === 0 ? (
-            <div className="mt-6 rounded-2xl border border-dashed border-white/10 p-6 text-center text-slate-400">
-              Envie um CSV para começar o mapeamento.
-            </div>
-          ) : (
+        <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+          <h2 className="text-2xl font-black">2. Mapeamento</h2>
+          <p className="mt-2 text-sm text-slate-400">Título e artista são obrigatórios. Energia, quando informada, deve estar entre 1 e 10.</p>
+          {headers.length ? (
             <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {TARGET_FIELDS.map((field) => (
-                <div
-                  key={field}
-                  className="rounded-2xl border border-white/10 bg-slate-900/50 p-4"
-                >
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                    {FIELD_LABELS[field]}
-                    {field === "title" ? " *" : ""}
-                  </label>
-
-                  <select
-                    value={mapping[field]}
-                    onChange={(e) =>
-                      setMapping((current) => ({
-                        ...current,
-                        [field]: e.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none"
-                  >
+              {fields.map((field) => (
+                <label key={field} className="rounded-2xl border border-white/10 bg-slate-900/50 p-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                  {labels[field]}{field === "title" || field === "artist" ? " *" : ""}
+                  <select value={mapping[field]} onChange={(event) => setMapping((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 block w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-100">
                     <option value="">Não mapear</option>
-                    {headers.map((header) => (
-                      <option key={`${field}-${header}`} value={header}>
-                        {header}
-                      </option>
-                    ))}
+                    {headers.map((header) => <option key={`${field}-${header}`} value={header}>{header}</option>)}
                   </select>
-                </div>
+                </label>
               ))}
             </div>
-          )}
+          ) : <p className="mt-6 rounded-2xl border border-dashed border-white/10 p-6 text-center text-slate-400">Envie um CSV para configurar o mapeamento.</p>}
         </div>
 
-        <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-black tracking-tight">
-                3. Preview e validação
-              </h2>
-              <p className="mt-2 text-sm text-slate-400">
-                Veja o que será importado, o que foi invalidado e o que foi removido por duplicidade no arquivo.
-              </p>
+              <h2 className="text-2xl font-black">3. Revisão e importação</h2>
+              <p className="mt-2 text-sm text-slate-400">Duplicidades dentro do CSV são removidas por título + artista.</p>
             </div>
-
-            <button
-              type="button"
-              onClick={handleImport}
-              disabled={processed.uniqueRows.length === 0 || isPending}
-              className="rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isPending
-                ? "Importando..."
-                : `Importar ${processed.uniqueRows.length} track(s)`}
+            <button type="button" onClick={handleImport} disabled={isPending || !processed.uniqueRows.length} className="rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+              {isPending ? "Importando..." : `Importar ${processed.uniqueRows.length} track(s)`}
             </button>
           </div>
-
           <div className="mt-6 grid gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                Linhas CSV
-              </p>
-              <p className="mt-2 text-3xl font-black">{rawRows.length}</p>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                Linhas válidas
-              </p>
-              <p className="mt-2 text-3xl font-black">{processed.validRows.length}</p>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                Inválidas
-              </p>
-              <p className="mt-2 text-3xl font-black">{processed.invalidCount}</p>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                Duplicadas no CSV
-              </p>
-              <p className="mt-2 text-3xl font-black">{processed.duplicateCount}</p>
-            </div>
+            <Metric label="Linhas CSV" value={rawRows.length} />
+            <Metric label="Válidas" value={processed.uniqueRows.length} />
+            <Metric label="Inválidas" value={processed.invalidCount} />
+            <Metric label="Duplicadas" value={processed.duplicateCount} />
           </div>
-
-          {processed.uniqueRows.length === 0 ? (
-            <div className="mt-6 rounded-2xl border border-dashed border-white/10 p-6 text-center text-slate-400">
-              Nenhuma linha pronta para importação.
-            </div>
-          ) : (
+          {processed.uniqueRows.length ? (
             <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-900/80 text-slate-300">
-                  <tr>
-                    <th className="px-4 py-3">Title</th>
-                    <th className="px-4 py-3">Artist</th>
-                    <th className="px-4 py-3">BPM</th>
-                    <th className="px-4 py-3">Key</th>
-                    <th className="px-4 py-3">Energy</th>
-                    <th className="px-4 py-3">Mood</th>
-                    <th className="px-4 py-3">Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {processed.previewRows.map((row, index) => (
-                    <tr
-                      key={`${row.title}-${row.artist ?? "sem-artista"}-${index}`}
-                      className="border-t border-white/10"
-                    >
-                      <td className="px-4 py-3">{row.title}</td>
-                      <td className="px-4 py-3">{row.artist ?? "—"}</td>
-                      <td className="px-4 py-3">{row.bpm ?? "—"}</td>
-                      <td className="px-4 py-3">{row.musical_key ?? "—"}</td>
-                      <td className="px-4 py-3">{row.energy ?? "—"}</td>
-                      <td className="px-4 py-3">{row.mood ?? "—"}</td>
-                      <td className="px-4 py-3">{row.notes ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="bg-slate-900 text-xs uppercase tracking-[0.14em] text-slate-400"><tr><th className="p-3">Título</th><th className="p-3">Artista</th><th className="p-3">BPM</th><th className="p-3">Key</th><th className="p-3">Energia</th></tr></thead>
+                <tbody>{processed.uniqueRows.slice(0, 10).map((row, index) => <tr key={`${row.title}-${row.artist}-${index}`} className="border-t border-white/10 text-slate-200"><td className="p-3">{row.title}</td><td className="p-3">{row.artist}</td><td className="p-3">{row.bpm ?? "—"}</td><td className="p-3">{row.musical_key ?? "—"}</td><td className="p-3">{row.energy ?? "—"}</td></tr>)}</tbody>
               </table>
             </div>
-          )}
-
-          {processed.uniqueRows.length > 10 ? (
-            <p className="mt-3 text-xs text-slate-400">
-              Mostrando 10 de {processed.uniqueRows.length} linhas prontas para importação.
-            </p>
           ) : null}
-        </div>
-
-        <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-          <h2 className="text-2xl font-black tracking-tight">Exemplo de CSV</h2>
-          <pre className="mt-4 overflow-x-auto rounded-2xl border border-white/10 bg-slate-900/70 p-4 text-xs text-slate-300">
-{`title,artist,bpm,musical_key,energy,mood,notes
-Track A,Artist A,124,8A,6,hypnotic,opening tool
-Track B,Artist B,126,8B,7,dark peak,main lift
-Track C,Artist C,123,7A,5,deep,respiro`}
-          </pre>
         </div>
       </section>
     </main>
   );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-slate-400">{label}</p><p className="mt-2 text-3xl font-black">{value}</p></div>;
 }
