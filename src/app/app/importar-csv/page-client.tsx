@@ -53,29 +53,92 @@ const FIELD_LABELS: Record<keyof MappingState, string> = {
 };
 
 function normalizeHeader(header: string) {
-  return header.trim().toLowerCase();
+  // Remove BOM (comum em CSVs exportados do Excel/Chosic) e normaliza espaços.
+  return header
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .toLowerCase();
 }
 
 function guessMapping(headers: string[]): MappingState {
   function findHeader(possibleNames: string[]) {
-    const found = headers.find((header) =>
+    // 1) Correspondência exata (ignorando maiúsculas/minúsculas, espaços e BOM).
+    const exact = headers.find((header) =>
       possibleNames.some(
         (possible) => normalizeHeader(header) === normalizeHeader(possible)
       )
     );
 
-    return found ?? "";
+    if (exact) return exact;
+
+    // 2) Correspondência parcial: aceita cabeçalhos como "Track Name",
+    // "Nome da Faixa (Original)" etc., que contêm um dos apelidos conhecidos.
+    const partial = headers.find((header) =>
+      possibleNames.some((possible) =>
+        normalizeHeader(header).includes(normalizeHeader(possible))
+      )
+    );
+
+    return partial ?? "";
   }
 
-  // Aqui nós ensinamos o vocabulário do Chosic para o sistema
+  // Vocabulário conhecido (Chosic, Spotify/Exportify, Rekordbox, planilhas em PT-BR etc.)
   return {
-    title: findHeader(["title", "track", "track_title", "name", "song", "titulo", "título"]),
-    artist: findHeader(["artist", "artists", "artista"]),
-    bpm: findHeader(["bpm"]),
-    musical_key: findHeader(["musical_key", "key", "camelot", "chave"]),
-    energy: findHeader(["energy", "energia"]),
-    mood: findHeader(["mood", "genres", "genre", "parent genres"]),
-    notes: findHeader(["notes", "comment", "comments", "notas"]),
+    title: findHeader([
+      "title",
+      "track title",
+      "track_title",
+      "track name",
+      "name",
+      "song",
+      "música",
+      "musica",
+      "faixa",
+      "nome da faixa",
+      "titulo",
+      "título",
+    ]),
+    artist: findHeader([
+      "artist",
+      "artists",
+      "artist name",
+      "artista",
+      "artistas",
+    ]),
+    bpm: findHeader(["bpm", "tempo", "bpm (original)"]),
+    musical_key: findHeader([
+      "camelot",
+      "musical_key",
+      "key (camelot)",
+      "chave",
+      "tom",
+      "tonalidade",
+      "key",
+    ]),
+    energy: findHeader([
+      "energy",
+      "energia",
+      "energy level",
+      "nível de energia",
+      "nivel de energia",
+    ]),
+    mood: findHeader([
+      "mood",
+      "genres",
+      "genre",
+      "parent genres",
+      "gênero",
+      "genero",
+      "estilo",
+    ]),
+    notes: findHeader([
+      "notes",
+      "comment",
+      "comments",
+      "notas",
+      "observações",
+      "observacoes",
+    ]),
   };
 }
 
@@ -84,62 +147,98 @@ function toNullableString(value: string) {
   return cleaned ? cleaned : null;
 }
 
-function toNullableNumber(value: string) {
-  const cleaned = value.trim().replace(",", ".");
+// Extrai o primeiro número de textos como "124 BPM", "7/10" ou "8,0".
+function extractNumber(value: string): number | null {
+  const cleaned = value.trim();
 
   if (!cleaned) return null;
 
-  const parsed = Number(cleaned);
+  const withDot = cleaned.replace(",", ".");
+  const match = withDot.match(/-?\d+(\.\d+)?/);
 
-  if (Number.isNaN(parsed)) return null;
+  if (!match) return null;
 
-  return parsed;
+  const parsed = Number(match[0]);
+
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+// O MixBrain usa energia numa escala de 1 a 10 (mesma escala do cadastro
+// manual e do cálculo de score de transição). Bases exportadas do Spotify/
+// Chosic costumam vir em 0-100. Detectamos a escala pelo maior valor
+// encontrado na coluna mapeada e convertemos automaticamente.
+function detectEnergyScale(rows: RawCsvRow[], energyHeader: string): 10 | 100 {
+  if (!energyHeader) return 10;
+
+  let maxValue = 0;
+
+  for (const row of rows) {
+    const raw = String(row[energyHeader] ?? "").trim();
+    if (!raw) continue;
+
+    const value = extractNumber(raw);
+    if (value !== null && value > maxValue) {
+      maxValue = value;
+    }
+  }
+
+  return maxValue > 10 ? 100 : 10;
+}
+
+function normalizeEnergy(raw: string, scale: 10 | 100): number | null {
+  const value = extractNumber(raw);
+
+  if (value === null || value <= 0) return null;
+
+  const scaled = scale === 100 ? value / 10 : value;
+  const rounded = Math.round(scaled);
+
+  return Math.min(10, Math.max(1, rounded));
 }
 
 function buildParsedRows(
   sourceRows: RawCsvRow[],
   mapping: MappingState
-): { validRows: ParsedRow[]; invalidCount: number } {
+): { validRows: ParsedRow[]; invalidCount: number; energyScale: 10 | 100 } {
+  const energyScale = detectEnergyScale(sourceRows, mapping.energy);
   let invalidCount = 0;
 
   const validRows = sourceRows
     .map((row) => {
       const title = mapping.title ? String(row[mapping.title] ?? "").trim() : "";
-      const artist = mapping.artist ? String(row[mapping.artist] ?? "").trim() : "";
-      const bpm = mapping.bpm ? String(row[mapping.bpm] ?? "").trim() : "";
-      const musicalKey = mapping.musical_key
-        ? String(row[mapping.musical_key] ?? "").trim()
-        : "";
-      const energy = mapping.energy ? String(row[mapping.energy] ?? "").trim() : "";
-      const mood = mapping.mood ? String(row[mapping.mood] ?? "").trim() : "";
-      const notes = mapping.notes ? String(row[mapping.notes] ?? "").trim() : "";
 
+      // Único critério que invalida a linha: título ausente. Os demais
+      // campos, quando não reconhecíveis, apenas ficam vazios — não
+      // descartam a track (parser tolerante, conforme diário do projeto).
       if (!title) {
         invalidCount += 1;
         return null;
       }
 
-      const parsedEnergy = toNullableNumber(energy);
+      const artist = mapping.artist ? String(row[mapping.artist] ?? "").trim() : "";
+      const bpmRaw = mapping.bpm ? String(row[mapping.bpm] ?? "").trim() : "";
+      const musicalKey = mapping.musical_key
+        ? String(row[mapping.musical_key] ?? "").trim()
+        : "";
+      const energyRaw = mapping.energy ? String(row[mapping.energy] ?? "").trim() : "";
+      const mood = mapping.mood ? String(row[mapping.mood] ?? "").trim() : "";
+      const notes = mapping.notes ? String(row[mapping.notes] ?? "").trim() : "";
 
-      // Correção: Agora a energia pode ser de 0 a 100
-      if (parsedEnergy !== null && (parsedEnergy < 0 || parsedEnergy > 100)) {
-        invalidCount += 1;
-        return null;
-      }
+      const bpmValue = extractNumber(bpmRaw);
 
       return {
         title,
         artist: toNullableString(artist),
-        bpm: toNullableNumber(bpm),
+        bpm: bpmValue !== null && bpmValue > 0 ? bpmValue : null,
         musical_key: toNullableString(musicalKey),
-        energy: parsedEnergy,
+        energy: energyRaw ? normalizeEnergy(energyRaw, energyScale) : null,
         mood: toNullableString(mood),
         notes: toNullableString(notes),
       };
     })
     .filter((row): row is ParsedRow => row !== null);
 
-  return { validRows, invalidCount };
+  return { validRows, invalidCount, energyScale };
 }
 
 function dedupeRows(rows: ParsedRow[]) {
@@ -218,6 +317,8 @@ export default function ImportarCsvClientPage({
     Papa.parse<RawCsvRow>(file, {
       header: true,
       skipEmptyLines: true,
+      delimitersToGuess: [",", ";", "\t", "|"],
+      transformHeader: (header) => header.replace(/^\uFEFF/, "").trim(),
       complete(results) {
         const parsedRows = results.data ?? [];
         const metaFields = (results.meta.fields ?? []).filter(Boolean);
@@ -243,7 +344,7 @@ export default function ImportarCsvClientPage({
   }
 
   const processed = useMemo(() => {
-    const { validRows, invalidCount } = buildParsedRows(rawRows, mapping);
+    const { validRows, invalidCount, energyScale } = buildParsedRows(rawRows, mapping);
     const { uniqueRows, duplicateCount } = dedupeRows(validRows);
 
     return {
@@ -251,6 +352,7 @@ export default function ImportarCsvClientPage({
       invalidCount,
       duplicateCount,
       uniqueRows,
+      energyScale,
       previewRows: uniqueRows.slice(0, 10),
     };
   }, [rawRows, mapping]);
@@ -377,8 +479,18 @@ export default function ImportarCsvClientPage({
         <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
           <h2 className="text-2xl font-black tracking-tight">3. Mapeamento de colunas</h2>
           <p className="mt-2 text-sm text-slate-400">
-            Confirme quais colunas do CSV correspondem aos campos do MixBrain. Título é obrigatório. Energia deve estar entre 0 e 100.
+            Confirme quais colunas do CSV correspondem aos campos do MixBrain.
+            Apenas o Título é obrigatório. BPM, energia e demais campos numéricos
+            que não puderem ser lidos ficam em branco, mas não descartam a track.
+            Energia em escala 0–100 é detectada e convertida automaticamente
+            para a escala 1–10 usada no MixBrain.
           </p>
+
+          {headers.length > 0 ? (
+            <p className="mt-3 text-xs text-slate-500">
+              Cabeçalhos detectados no arquivo: {headers.join(", ")}
+            </p>
+          ) : null}
 
           {headers.length === 0 ? (
             <div className="mt-6 rounded-2xl border border-dashed border-white/10 p-6 text-center text-slate-400">
@@ -471,6 +583,22 @@ export default function ImportarCsvClientPage({
               <p className="mt-2 text-3xl font-black">{processed.duplicateCount}</p>
             </div>
           </div>
+
+          {processed.energyScale === 100 && mapping.energy ? (
+            <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-3 text-xs text-cyan-100">
+              Energia detectada em escala 0–100 na coluna &quot;{mapping.energy}&quot;.
+              Os valores foram convertidos automaticamente para a escala 1–10
+              usada pelo MixBrain.
+            </div>
+          ) : null}
+
+          {processed.invalidCount > 0 ? (
+            <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-100">
+              {processed.invalidCount} linha(s) sem título ficaram de fora
+              (título é o único campo obrigatório). Confira o mapeamento da
+              coluna Título acima se o número parecer maior que o esperado.
+            </div>
+          ) : null}
 
           {processed.uniqueRows.length === 0 ? (
             <div className="mt-6 rounded-2xl border border-dashed border-white/10 p-6 text-center text-slate-400">

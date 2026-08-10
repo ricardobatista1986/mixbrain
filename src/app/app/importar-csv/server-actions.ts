@@ -30,6 +30,23 @@ function makeTrackKey(title: string, artist: string) {
   )}::${normalizeText(artist).toLocaleLowerCase("pt-BR")}`;
 }
 
+// Defesa em profundidade: o cliente já normaliza BPM/energia, mas
+// nunca confiamos apenas na validação client-side. tracks.energy tem
+// CHECK (energy BETWEEN 1 AND 10) e tracks.bpm tem CHECK (bpm > 0) no
+// banco — um valor fora do padrão em UMA linha derruba o lote inteiro
+// no insert, então normalizamos/descartamos aqui antes de gravar.
+function sanitizeEnergy(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) return null;
+  const rounded = Math.round(value);
+  if (rounded < 1 || rounded > 10) return null;
+  return rounded;
+}
+
+function sanitizeBpm(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
 function chunkArray<T>(items: T[], size: number) {
   const chunks: T[][] = [];
 
@@ -145,9 +162,9 @@ export async function importTracksFromCsv(
           user_id: userId,
           title: row.title,
           artist: row.artist || UNKNOWN_ARTIST,
-          bpm: row.bpm,
+          bpm: sanitizeBpm(row.bpm),
           musical_key: row.musical_key,
-          energy: row.energy,
+          energy: sanitizeEnergy(row.energy),
           mood: row.mood,
           notes: row.notes,
           source_name: "csv",

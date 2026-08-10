@@ -83,10 +83,25 @@ export async function addCandidate(projectId: string, formData: FormData) {
     throw new Error("Selecione uma track.");
   }
 
+  const { data: lastCandidate, error: lastCandidateError } = await supabase
+    .from("set_candidates")
+    .select("sort_order")
+    .eq("project_id", projectId)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+
+  if (lastCandidateError) {
+    throw new Error(lastCandidateError.message);
+  }
+
+  const nextSortOrder = (lastCandidate?.[0]?.sort_order ?? 0) + 1;
+
   const { error } = await supabase.from("set_candidates").insert({
     project_id: projectId,
     track_id: trackId,
+    user_id: userId,
     notes: notes || null,
+    sort_order: nextSortOrder,
   });
 
   if (error) {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/logout-button";
+import { EditProjectForm } from "@/components/edit-project-form";
 import { createClient } from "@/lib/supabase/server";
 import {
   addCandidate,
@@ -521,6 +522,28 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               Este projeto ainda não tem descrição.
             </p>
           )}
+
+          <details className="group mt-8 max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
+            <summary className="cursor-pointer list-none px-5 py-3 text-sm font-bold text-slate-300 transition hover:text-cyan-200">
+              <span className="mr-2 inline-block transition-transform group-open:rotate-90">
+                ▶
+              </span>
+              Editar projeto (nome, descrição, BPM alvo e direção narrativa)
+            </summary>
+            <div className="border-t border-white/10 p-5">
+              <EditProjectForm
+                project={{
+                  id: project.id,
+                  name: project.name,
+                  description: project.description,
+                  target_duration_minutes: project.target_duration_minutes,
+                  bpm_min: project.bpm_min,
+                  bpm_max: project.bpm_max,
+                  narrative_brief: project.narrative_brief,
+                }}
+              />
+            </div>
+          </details>
         </div>
       </section>
 
