@@ -8,6 +8,7 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { createClient } from "@/lib/supabase/server";
 import {
   approveCandidateToTracklist,
+  autoOrganizeTracklist,
   createFrozenBlock,
   dissolveFrozenBlock,
   moveEntityDown,
@@ -655,6 +656,30 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                   Sequência e Blocos
                 </h2>
               </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-indigo-400/20 bg-indigo-400/[0.06] p-4">
+              <p className="text-sm font-bold text-indigo-100">
+                Organizar tracklist automaticamente
+              </p>
+              <p className="mt-1 text-xs leading-5 text-indigo-200/80">
+                Aprova todas as candidatas pendentes e reordena a tracklist
+                inteira com base em harmonia (Camelot), energia, BPM, mood e
+                diversidade — o mesmo critério do score exibido abaixo em
+                cada transição. Blocos congelados mantêm a ordem interna, só
+                mudam de posição no set. Você pode ajustar manualmente
+                depois.
+              </p>
+              <form action={autoOrganizeTracklist} className="mt-3">
+                <input type="hidden" name="project_id" value={id} />
+                <ConfirmSubmitButton
+                  confirmLabel="Confirmar e organizar"
+                  className="rounded-lg bg-indigo-400 px-4 py-2 text-xs font-bold text-slate-950 transition hover:bg-indigo-300"
+                  confirmClassName="rounded-lg bg-indigo-300 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-indigo-200"
+                >
+                  Gerar ordem automática
+                </ConfirmSubmitButton>
+              </form>
             </div>
 
             <form id="create-block-form" action={createFrozenBlock}>

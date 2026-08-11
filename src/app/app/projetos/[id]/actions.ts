@@ -2,6 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import {
+  buildAutoSequence,
+  type SequenceUnit,
+} from "@/lib/mixbrain/auto-sequence";
+import type {
+  CuratorialMoment,
+  ScoreTrack,
+  ScoreTracklistItemContext,
+} from "@/lib/mixbrain/transition-score";
 
 type SupabaseLike = Awaited<ReturnType<typeof createClient>>;
 
@@ -537,5 +546,242 @@ export async function updateSetProject(
   }
 
   revalidatePath("/app");
+  revalidatePath(`/app/projetos/${projectId}`);
+}
+
+function normalizeTrackRelation(relation: unknown): ScoreTrack | null {
+  const track = Array.isArray(relation) ? relation[0] : relation;
+
+  if (!track || typeof track !== "object") return null;
+
+  const record = track as Record<string, unknown>;
+
+  if (typeof record.id !== "string" || typeof record.title !== "string") {
+    return null;
+  }
+
+  return {
+    id: record.id,
+    title: record.title,
+    artist: typeof record.artist === "string" ? record.artist : null,
+    bpm: typeof record.bpm === "number" ? record.bpm : null,
+    musical_key:
+      typeof record.musical_key === "string" ? record.musical_key : null,
+    energy: typeof record.energy === "number" ? record.energy : null,
+    mood: typeof record.mood === "string" ? record.mood : null,
+  };
+}
+
+function contextFromMoment(
+  moment: unknown
+): ScoreTracklistItemContext | null {
+  return {
+    curatorial_moment:
+      typeof moment === "string" ? (moment as CuratorialMoment) : null,
+  };
+}
+
+/**
+ * Gera automaticamente a ordem da tracklist: aprova todas as candidatas
+ * pendentes e reordena TODAS as tracks do projeto (candidatas + já
+ * aprovadas) usando compatibilidade de harmonia, energia, BPM, mood e
+ * diversidade — a mesma lógica de score já exibida na tela. Blocos
+ * congelados mantêm a ordem interna; só a posição do bloco no set pode
+ * mudar. Não é uma otimização global, é uma heurística gulosa
+ * (nearest-neighbor) — determinística e auditável pelos scores mostrados
+ * depois na tela.
+ */
+export async function autoOrganizeTracklist(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
+  const projectId = String(formData.get("project_id") || "");
+
+  if (!projectId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { data: existingItemsRaw, error: itemsError } = await supabase
+    .from("set_tracklist_items")
+    .select(
+      `
+      id,
+      track_id,
+      block_id,
+      curatorial_moment,
+      tracks ( id, title, artist, bpm, musical_key, energy, mood )
+    `
+    )
+    .eq("project_id", projectId)
+    .order("position", { ascending: true });
+
+  if (itemsError) {
+    throw new Error(itemsError.message);
+  }
+
+  const { data: candidatesRaw, error: candidatesError } = await supabase
+    .from("set_candidates")
+    .select(
+      `
+      id,
+      track_id,
+      tracks ( id, title, artist, bpm, musical_key, energy, mood )
+    `
+    )
+    .eq("project_id", projectId);
+
+  if (candidatesError) {
+    throw new Error(candidatesError.message);
+  }
+
+  type ExistingRow = {
+    id: string;
+    track_id: string;
+    block_id: string | null;
+    curatorial_moment: unknown;
+    track: ScoreTrack;
+  };
+
+  type RawExistingRow = Omit<ExistingRow, "track"> & { track: ScoreTrack | null };
+
+  const existingRows: ExistingRow[] = (existingItemsRaw ?? [])
+    .map(
+      (row): RawExistingRow => ({
+        id: row.id as string,
+        track_id: row.track_id as string,
+        block_id: (row.block_id ?? null) as string | null,
+        curatorial_moment: row.curatorial_moment,
+        track: normalizeTrackRelation(row.tracks),
+      })
+    )
+    .filter((row): row is ExistingRow => row.track !== null);
+
+  const existingTrackIds = new Set(existingRows.map((row) => row.track_id));
+
+  const units: SequenceUnit[] = [];
+
+  let index = 0;
+  while (index < existingRows.length) {
+    const row = existingRows[index];
+
+    if (row.block_id) {
+      const blockId = row.block_id;
+      const members: ExistingRow[] = [];
+
+      while (index < existingRows.length && existingRows[index].block_id === blockId) {
+        members.push(existingRows[index]);
+        index += 1;
+      }
+
+      const first = members[0];
+      const last = members[members.length - 1];
+
+      units.push({
+        key: `existing-block:${blockId}`,
+        entryTrack: first.track,
+        exitTrack: last.track,
+        entryContext: contextFromMoment(first.curatorial_moment),
+        exitContext: contextFromMoment(last.curatorial_moment),
+        members: members.map((member) => ({
+          kind: "existing" as const,
+          itemId: member.id,
+        })),
+      });
+    } else {
+      units.push({
+        key: `existing-item:${row.id}`,
+        entryTrack: row.track,
+        exitTrack: row.track,
+        entryContext: contextFromMoment(row.curatorial_moment),
+        exitContext: contextFromMoment(row.curatorial_moment),
+        members: [{ kind: "existing" as const, itemId: row.id }],
+      });
+      index += 1;
+    }
+  }
+
+  const candidateRows = (candidatesRaw ?? [])
+    .map((row) => ({
+      track_id: row.track_id as string,
+      track: normalizeTrackRelation(row.tracks),
+    }))
+    .filter(
+      (row): row is { track_id: string; track: ScoreTrack } =>
+        row.track !== null && !existingTrackIds.has(row.track_id)
+    );
+
+  for (const candidate of candidateRows) {
+    units.push({
+      key: `new:${candidate.track_id}`,
+      entryTrack: candidate.track,
+      exitTrack: candidate.track,
+      entryContext: null,
+      exitContext: null,
+      members: [{ kind: "new" as const, trackId: candidate.track_id }],
+    });
+  }
+
+  if (units.length < 2) {
+    throw new Error(
+      "São necessárias pelo menos 2 tracks (candidatas ou já aprovadas) para organizar automaticamente."
+    );
+  }
+
+  const sequence = buildAutoSequence(units);
+  const flatMembers = sequence.flatMap((unit) => unit.members);
+
+  // Fase 1: joga todos os items existentes para posições negativas
+  // temporárias, liberando todo o espaço positivo de posição (que tem
+  // UNIQUE(project_id, position)) sem colidir com ninguém.
+  for (let i = 0; i < existingRows.length; i += 1) {
+    const { error } = await supabase
+      .from("set_tracklist_items")
+      .update({ position: -(i + 1) })
+      .eq("id", existingRows[i].id)
+      .eq("project_id", projectId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  // Fase 2: insere as candidatas aprovadas agora, direto na posição final.
+  // O espaço positivo está livre (fase 1), então não há colisão.
+  for (let i = 0; i < flatMembers.length; i += 1) {
+    const member = flatMembers[i];
+
+    if (member.kind === "new") {
+      const { error } = await supabase.from("set_tracklist_items").insert({
+        project_id: projectId,
+        track_id: member.trackId,
+        position: i + 1,
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    }
+  }
+
+  // Fase 3: move os items existentes (ainda em posições negativas) para a
+  // posição final. Cada alvo é único e não colide com o que já foi
+  // ocupado na fase 2 nem com outro item existente ainda pendente.
+  for (let i = 0; i < flatMembers.length; i += 1) {
+    const member = flatMembers[i];
+
+    if (member.kind === "existing") {
+      const { error } = await supabase
+        .from("set_tracklist_items")
+        .update({ position: i + 1 })
+        .eq("id", member.itemId)
+        .eq("project_id", projectId);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    }
+  }
+
   revalidatePath(`/app/projetos/${projectId}`);
 }
