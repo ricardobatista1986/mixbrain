@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/logout-button";
 import { CreateProjectForm } from "@/components/create-project-form";
+import { DeleteProjectButton } from "@/components/delete-project-button";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AppPage() {
@@ -145,34 +146,46 @@ export default async function AppPage() {
             {projects && projects.length > 0 ? (
               <div className="mt-8 space-y-4">
                 {projects.map((project) => (
-                  <Link
+                  <div
                     key={project.id}
-                    href={`/app/projetos/${project.id}`}
-                    className="block rounded-2xl border border-white/10 bg-slate-950/70 p-5 transition hover:-translate-y-0.5 hover:border-cyan-300/40 hover:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 p-5 transition hover:border-cyan-300/40"
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-bold tracking-tight text-slate-100">
-                          {project.name}
-                        </h3>
-                        <p className="mt-2 text-sm leading-6 text-slate-400">
-                          {project.description?.trim()
-                            ? project.description
-                            : "Sem descrição ainda."}
-                        </p>
+                    <Link
+                      href={`/app/projetos/${project.id}`}
+                      className="block rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-bold tracking-tight text-slate-100">
+                            {project.name}
+                          </h3>
+                          <p className="mt-2 text-sm leading-6 text-slate-400">
+                            {project.description?.trim()
+                              ? project.description
+                              : "Sem descrição ainda."}
+                          </p>
+                        </div>
+
+                        <div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                          {project.target_duration_minutes
+                            ? `${project.target_duration_minutes} min`
+                            : "Sem duração"}
+                        </div>
                       </div>
 
-                      <div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">
-                        {project.target_duration_minutes
-                          ? `${project.target_duration_minutes} min`
-                          : "Sem duração"}
-                      </div>
+                      <p className="mt-5 text-sm font-semibold text-cyan-200">
+                        Abrir projeto <span aria-hidden="true">→</span>
+                      </p>
+                    </Link>
+
+                    <div className="mt-4 flex justify-end border-t border-white/5 pt-4">
+                      <DeleteProjectButton
+                        projectId={project.id}
+                        projectName={project.name}
+                        variant="icon"
+                      />
                     </div>
-
-                    <p className="mt-5 text-sm font-semibold text-cyan-200">
-                      Abrir projeto <span aria-hidden="true">→</span>
-                    </p>
-                  </Link>
+                  </div>
                 ))}
               </div>
             ) : (

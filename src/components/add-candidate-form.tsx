@@ -31,6 +31,10 @@ export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFor
       try {
         await addCandidate(projectId, formData);
         setSuccessMessage("Candidata adicionada com sucesso.");
+        const form = document.getElementById(
+          "add-candidate-form"
+        ) as HTMLFormElement | null;
+        form?.reset();
       } catch (error) {
         setErrorMessage(
           error instanceof Error
@@ -80,7 +84,7 @@ export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFor
         </p>
       </div>
 
-      <form action={handleSubmit} className="mt-8 grid gap-5">
+      <form id="add-candidate-form" action={handleSubmit} className="mt-8 grid gap-5">
         <label className="block">
           <span className="mb-2 block text-sm font-medium text-slate-300">
             Track

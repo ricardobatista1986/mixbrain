@@ -2,9 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/logout-button";
 import { EditProjectForm } from "@/components/edit-project-form";
+import { DeleteProjectButton } from "@/components/delete-project-button";
+import { AddCandidateForm } from "@/components/add-candidate-form";
 import { createClient } from "@/lib/supabase/server";
 import {
-  addCandidate,
   approveCandidateToTracklist,
   createFrozenBlock,
   dissolveFrozenBlock,
@@ -381,7 +382,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
   const { data: allTracks } = await supabase
     .from("tracks")
-    .select("id, title, artist")
+    .select("id, title, artist, bpm, musical_key, energy, mood")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
@@ -440,7 +441,6 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
   const availableTracks =
     allTracks?.filter((track) => !candidateTrackIds.has(track.id)) ?? [];
 
-  const addCandidateAction = addCandidate.bind(null, id);
 
   const groupedItems: GroupedItem[] = [];
   let currentBlock: GroupedBlock | null = null;
@@ -542,6 +542,18 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                   narrative_brief: project.narrative_brief,
                 }}
               />
+
+              <div className="mt-6 border-t border-white/10 pt-6">
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-rose-300/80">
+                  Zona de risco
+                </p>
+                <DeleteProjectButton
+                  projectId={project.id}
+                  projectName={project.name}
+                  redirectTo="/app"
+                  variant="full"
+                />
+              </div>
             </div>
           </details>
         </div>
@@ -566,39 +578,8 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               </span>
             </div>
 
-            <div className="mt-6 rounded-2xl border border-white/10 bg-slate-900/40 p-5">
-              <h3 className="mb-3 text-sm font-bold text-slate-300">
-                Adicionar da biblioteca
-              </h3>
-
-              <form action={addCandidateAction} className="flex flex-col gap-3">
-                <select
-                  name="trackId"
-                  className="w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-sm text-slate-100 outline-none"
-                  required
-                >
-                  <option value="">Selecione uma track...</option>
-                  {availableTracks.map((track) => (
-                    <option key={track.id} value={track.id}>
-                      {track.title} {track.artist ? `- ${track.artist}` : ""}
-                    </option>
-                  ))}
-                </select>
-
-                <input
-                  type="text"
-                  name="notes"
-                  placeholder="Nota ou intenção..."
-                  className="w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-sm text-slate-100 outline-none"
-                />
-
-                <button
-                  type="submit"
-                  className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700"
-                >
-                  Adicionar Candidata
-                </button>
-              </form>
+            <div className="mt-6">
+              <AddCandidateForm projectId={id} availableTracks={availableTracks} />
             </div>
 
             <div className="mt-6 space-y-4">

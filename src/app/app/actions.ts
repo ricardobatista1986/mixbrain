@@ -49,3 +49,38 @@ export async function createSetProject(formData: FormData) {
 
   revalidatePath("/app");
 }
+
+export async function deleteSetProject(projectId: string) {
+  const supabase = await createClient();
+
+  const { data: authData } = await supabase.auth.getClaims();
+  const claims = authData?.claims ?? null;
+
+  if (!claims || typeof claims.sub !== "string") {
+    throw new Error("Usuário não autenticado.");
+  }
+
+  if (!projectId) {
+    throw new Error("Projeto inválido.");
+  }
+
+  // Todas as tabelas filhas (candidatas, tracklist, blocos, versões,
+  // transições aprovadas, eventos de curadoria) têm ON DELETE CASCADE
+  // para set_projects, então este delete limpa tudo relacionado ao
+  // projeto de uma vez, sem deixar registros órfãos.
+  const { error, count } = await supabase
+    .from("set_projects")
+    .delete({ count: "exact" })
+    .eq("id", projectId)
+    .eq("user_id", claims.sub);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!count) {
+    throw new Error("Projeto não encontrado ou sem permissão para excluir.");
+  }
+
+  revalidatePath("/app");
+}
