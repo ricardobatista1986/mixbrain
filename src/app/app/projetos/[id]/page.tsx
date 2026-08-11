@@ -4,6 +4,7 @@ import { LogoutButton } from "@/components/logout-button";
 import { EditProjectForm } from "@/components/edit-project-form";
 import { DeleteProjectButton } from "@/components/delete-project-button";
 import { AddCandidateForm } from "@/components/add-candidate-form";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { createClient } from "@/lib/supabase/server";
 import {
   approveCandidateToTracklist,
@@ -392,6 +393,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
       id,
       track_id,
       notes,
+      sort_order,
       tracks (
         id,
         title,
@@ -405,6 +407,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
       )
     `)
     .eq("project_id", id)
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
   const { data: rawTracklistItems } = await supabase
@@ -728,15 +731,15 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                               </button>
                             </form>
 
-                            <form action={dissolveFrozenBlock}>
+                            <form action={dissolveFrozenBlock} className="ml-2">
                               <input type="hidden" name="project_id" value={id} />
                               <input type="hidden" name="block_id" value={group.block_id} />
-                              <button
-                                type="submit"
-                                className="ml-2 p-1 text-rose-400 hover:text-rose-300"
+                              <ConfirmSubmitButton
+                                className="p-1 text-rose-400 hover:text-rose-300"
+                                confirmClassName="p-1 font-bold text-rose-300 hover:text-rose-200"
                               >
                                 Desfazer
-                              </button>
+                              </ConfirmSubmitButton>
                             </form>
                           </div>
                         </div>
@@ -906,12 +909,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                   name="tracklist_item_id"
                                   value={group.item.id}
                                 />
-                                <button
-                                  type="submit"
-                                  className="text-xs text-rose-400 hover:text-rose-300"
-                                >
-                                  Remover
-                                </button>
+                                <ConfirmSubmitButton>Remover</ConfirmSubmitButton>
                               </form>
                             </div>
                           </div>

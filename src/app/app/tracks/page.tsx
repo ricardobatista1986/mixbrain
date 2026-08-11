@@ -3,14 +3,7 @@ import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/logout-button";
 import { createClient } from "@/lib/supabase/server";
 import { CreateTrackForm } from "@/components/create-track-form";
-
-function formatBpm(value: number | null) {
-  if (value === null) return "—";
-  return Number(value).toLocaleString("pt-BR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
-}
+import { TracksLibrary } from "@/components/tracks-library";
 
 export default async function TracksPage() {
   const supabase = await createClient();
@@ -73,99 +66,7 @@ export default async function TracksPage() {
 
         <div className="mt-10 grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
           <CreateTrackForm />
-
-          <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-300">
-                  Catálogo atual
-                </p>
-                <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-50">
-                  {tracks?.length ?? 0} tracks cadastradas
-                </h2>
-              </div>
-            </div>
-
-            {tracks && tracks.length > 0 ? (
-              <div className="mt-6 space-y-4">
-                {tracks.map((track) => (
-                  <article
-                    key={track.id}
-                    className="rounded-2xl border border-white/10 bg-slate-950/70 p-5"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-bold tracking-tight text-slate-100">
-                          {track.title}
-                        </h3>
-                        <p className="mt-1 text-sm text-slate-400">
-                          {track.artist}
-                        </p>
-                      </div>
-
-                      <div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">
-                        {track.energy ? `Energia ${track.energy}/10` : "Sem energia"}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      <div className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                          BPM
-                        </p>
-                        <p className="mt-2 text-sm font-semibold text-slate-200">
-                          {formatBpm(track.bpm)}
-                        </p>
-                      </div>
-
-                      <div className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                          Tonalidade
-                        </p>
-                        <p className="mt-2 text-sm font-semibold text-slate-200">
-                          {track.musical_key?.trim() ? track.musical_key : "—"}
-                        </p>
-                      </div>
-
-                      <div className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                          Mood
-                        </p>
-                        <p className="mt-2 text-sm font-semibold text-slate-200">
-                          {track.mood?.trim() ? track.mood : "—"}
-                        </p>
-                      </div>
-
-                      <div className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                          Origem
-                        </p>
-                        <p className="mt-2 text-sm font-semibold text-slate-200">
-                          {track.source?.trim() ? track.source : "—"}
-                        </p>
-                      </div>
-
-                      <div className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 sm:col-span-2">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                          Observações
-                        </p>
-                        <p className="mt-2 text-sm font-semibold text-slate-200">
-                          {track.notes?.trim() ? track.notes : "Sem observações"}
-                        </p>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-6 rounded-2xl border border-dashed border-white/10 bg-slate-950/50 p-6">
-                <p className="text-sm leading-7 text-slate-400">
-                  Nenhuma track cadastrada ainda. Use o formulário ao lado para
-                  criar a primeira entrada da biblioteca.
-                </p>
-              </div>
-            )}
-          </section>
+          <TracksLibrary tracks={tracks ?? []} />
         </div>
       </div>
     </main>
