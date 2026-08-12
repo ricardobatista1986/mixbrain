@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Papa from "papaparse";
 import Link from "next/link";
 import { importTracksFromCsv } from "./server-actions";
+import { autoOrganizeTracklist } from "@/app/app/projetos/[id]/actions";
 
 type RawCsvRow = Record<string, string>;
 
@@ -25,6 +26,11 @@ type MappingState = {
   energy: string;
   mood: string;
   notes: string;
+  valence: string;
+  danceability: string;
+  acousticness: string;
+  instrumentalness: string;
+  speechiness: string;
 };
 
 type ProjectOption = {
@@ -32,7 +38,9 @@ type ProjectOption = {
   name: string;
 };
 
-const TARGET_FIELDS: Array<keyof MappingState> = [
+const REQUIRED_FIELDS: Array<keyof MappingState> = ["title"];
+
+const MAIN_FIELDS: Array<keyof MappingState> = [
   "title",
   "artist",
   "bpm",
@@ -42,15 +50,48 @@ const TARGET_FIELDS: Array<keyof MappingState> = [
   "notes",
 ];
 
+const FEATURE_FIELDS: Array<keyof MappingState> = [
+  "valence",
+  "danceability",
+  "acousticness",
+  "instrumentalness",
+  "speechiness",
+];
+
 const FIELD_LABELS: Record<keyof MappingState, string> = {
   title: "Título",
   artist: "Artista",
   bpm: "BPM",
   musical_key: "Key Camelot",
   energy: "Energia",
-  mood: "Mood",
+  mood: "Mood / Gênero",
   notes: "Notas",
+  valence: "Valence (positividade)",
+  danceability: "Danceability",
+  acousticness: "Acousticness",
+  instrumentalness: "Instrumentalness",
+  speechiness: "Speechiness",
 };
+
+const emptyMapping: MappingState = {
+  title: "",
+  artist: "",
+  bpm: "",
+  musical_key: "",
+  energy: "",
+  mood: "",
+  notes: "",
+  valence: "",
+  danceability: "",
+  acousticness: "",
+  instrumentalness: "",
+  speechiness: "",
+};
+
+// Lotes enviados um de cada vez pro server action, para nunca esbarrar em
+// limite de tamanho de payload nem deixar o usuário sem feedback num
+// arquivo de milhares de linhas.
+const IMPORT_BATCH_SIZE = 150;
 
 function normalizeHeader(header: string) {
   // Remove BOM (comum em CSVs exportados do Excel/Chosic) e normaliza espaços.
@@ -98,13 +139,7 @@ function guessMapping(headers: string[]): MappingState {
       "titulo",
       "título",
     ]),
-    artist: findHeader([
-      "artist",
-      "artists",
-      "artist name",
-      "artista",
-      "artistas",
-    ]),
+    artist: findHeader(["artist", "artists", "artist name", "artista", "artistas"]),
     bpm: findHeader(["bpm", "tempo", "bpm (original)"]),
     musical_key: findHeader([
       "camelot",
@@ -131,14 +166,12 @@ function guessMapping(headers: string[]): MappingState {
       "genero",
       "estilo",
     ]),
-    notes: findHeader([
-      "notes",
-      "comment",
-      "comments",
-      "notas",
-      "observações",
-      "observacoes",
-    ]),
+    notes: findHeader(["notes", "comment", "comments", "notas", "observações", "observacoes"]),
+    valence: findHeader(["valence"]),
+    danceability: findHeader(["danceability", "dance"]),
+    acousticness: findHeader(["acousticness", "acoustic"]),
+    instrumentalness: findHeader(["instrumentalness", "instrumental"]),
+    speechiness: findHeader(["speechiness", "speech"]),
   };
 }
 
@@ -150,16 +183,13 @@ function toNullableString(value: string) {
 // Extrai o primeiro número de textos como "124 BPM", "7/10" ou "8,0".
 function extractNumber(value: string): number | null {
   const cleaned = value.trim();
-
   if (!cleaned) return null;
 
   const withDot = cleaned.replace(",", ".");
   const match = withDot.match(/-?\d+(\.\d+)?/);
-
   if (!match) return null;
 
   const parsed = Number(match[0]);
-
   return Number.isNaN(parsed) ? null : parsed;
 }
 
@@ -171,15 +201,11 @@ function detectEnergyScale(rows: RawCsvRow[], energyHeader: string): 10 | 100 {
   if (!energyHeader) return 10;
 
   let maxValue = 0;
-
   for (const row of rows) {
     const raw = String(row[energyHeader] ?? "").trim();
     if (!raw) continue;
-
     const value = extractNumber(raw);
-    if (value !== null && value > maxValue) {
-      maxValue = value;
-    }
+    if (value !== null && value > maxValue) maxValue = value;
   }
 
   return maxValue > 10 ? 100 : 10;
@@ -187,20 +213,100 @@ function detectEnergyScale(rows: RawCsvRow[], energyHeader: string): 10 | 100 {
 
 function normalizeEnergy(raw: string, scale: 10 | 100): number | null {
   const value = extractNumber(raw);
-
   if (value === null || value <= 0) return null;
 
   const scaled = scale === 100 ? value / 10 : value;
-  const rounded = Math.round(scaled);
+  return Math.min(10, Math.max(1, Math.round(scaled)));
+}
 
-  return Math.min(10, Math.max(1, rounded));
+// Features de áudio no estilo Spotify (valence, danceability, acousticness,
+// instrumentalness, speechiness) costumam vir em escala 0–1, mas alguns
+// exports (Chosic) usam 0–100. Mesma lógica de detecção da energia,
+// generalizada.
+function detect01Scale(rows: RawCsvRow[], header: string): 1 | 100 {
+  if (!header) return 1;
+
+  let maxValue = 0;
+  for (const row of rows) {
+    const raw = String(row[header] ?? "").trim();
+    if (!raw) continue;
+    const value = extractNumber(raw);
+    if (value !== null && value > maxValue) maxValue = value;
+  }
+
+  return maxValue > 1.5 ? 100 : 1;
+}
+
+function normalize01(raw: string, scale: 1 | 100): number | null {
+  const value = extractNumber(raw);
+  if (value === null) return null;
+
+  const scaled = scale === 100 ? value / 100 : value;
+  return Math.min(1, Math.max(0, scaled));
+}
+
+/**
+ * Deriva tags de mood a partir de features de áudio (quando disponíveis),
+ * usando o modelo clássico valence×energy (quadrantes de humor musical:
+ * eufórico, sombrio, melancólico, relaxado) mais sinais adicionais de
+ * acousticness/instrumentalness/danceability. É uma heurística baseada em
+ * limiares — não é análise de áudio de verdade, é inferência a partir de
+ * metadados já presentes no CSV. Serve para preencher automaticamente uma
+ * característica que, de outra forma, ficaria vazia ou dependeria 100% de
+ * digitação manual.
+ */
+function deriveMoodTags(features: {
+  valence: number | null;
+  energy10: number | null;
+  danceability: number | null;
+  acousticness: number | null;
+  instrumentalness: number | null;
+  speechiness: number | null;
+}): string[] {
+  const tags: string[] = [];
+  const { valence, energy10, danceability, acousticness, instrumentalness, speechiness } =
+    features;
+
+  if (valence !== null && energy10 !== null) {
+    const highEnergy = energy10 >= 6;
+    const lowEnergy = energy10 < 4;
+    const highValence = valence >= 0.55;
+    const lowValence = valence < 0.4;
+
+    if (highValence && highEnergy) tags.push("Eufórico");
+    else if (lowValence && highEnergy) tags.push("Sombrio");
+    else if (lowValence && lowEnergy) tags.push("Melancólico");
+    else if (highValence && lowEnergy) tags.push("Relaxado");
+  }
+
+  if (acousticness !== null && acousticness >= 0.6) tags.push("Acústico");
+  if (instrumentalness !== null && instrumentalness >= 0.5) tags.push("Instrumental");
+  if (speechiness !== null && speechiness >= 0.33) tags.push("Vocal falado");
+  if (danceability !== null && danceability >= 0.7) tags.push("Dançante");
+
+  return tags;
 }
 
 function buildParsedRows(
   sourceRows: RawCsvRow[],
   mapping: MappingState
-): { validRows: ParsedRow[]; invalidCount: number; energyScale: 10 | 100 } {
+): { validRows: ParsedRow[]; invalidCount: number; energyScale: 10 | 100; hasFeatureColumns: boolean } {
   const energyScale = detectEnergyScale(sourceRows, mapping.energy);
+
+  const valenceScale = detect01Scale(sourceRows, mapping.valence);
+  const danceScale = detect01Scale(sourceRows, mapping.danceability);
+  const acousticScale = detect01Scale(sourceRows, mapping.acousticness);
+  const instrumentalScale = detect01Scale(sourceRows, mapping.instrumentalness);
+  const speechScale = detect01Scale(sourceRows, mapping.speechiness);
+
+  const hasFeatureColumns = Boolean(
+    mapping.valence ||
+      mapping.danceability ||
+      mapping.acousticness ||
+      mapping.instrumentalness ||
+      mapping.speechiness
+  );
+
   let invalidCount = 0;
 
   const validRows = sourceRows
@@ -209,7 +315,7 @@ function buildParsedRows(
 
       // Único critério que invalida a linha: título ausente. Os demais
       // campos, quando não reconhecíveis, apenas ficam vazios — não
-      // descartam a track (parser tolerante, conforme diário do projeto).
+      // descartam a track (parser tolerante).
       if (!title) {
         invalidCount += 1;
         return null;
@@ -221,29 +327,69 @@ function buildParsedRows(
         ? String(row[mapping.musical_key] ?? "").trim()
         : "";
       const energyRaw = mapping.energy ? String(row[mapping.energy] ?? "").trim() : "";
-      const mood = mapping.mood ? String(row[mapping.mood] ?? "").trim() : "";
+      const rawMood = mapping.mood ? String(row[mapping.mood] ?? "").trim() : "";
       const notes = mapping.notes ? String(row[mapping.notes] ?? "").trim() : "";
 
       const bpmValue = extractNumber(bpmRaw);
+      const energyValue = energyRaw ? normalizeEnergy(energyRaw, energyScale) : null;
+
+      let mood = toNullableString(rawMood);
+
+      if (hasFeatureColumns) {
+        const valence = mapping.valence
+          ? normalize01(String(row[mapping.valence] ?? ""), valenceScale)
+          : null;
+        const danceability = mapping.danceability
+          ? normalize01(String(row[mapping.danceability] ?? ""), danceScale)
+          : null;
+        const acousticness = mapping.acousticness
+          ? normalize01(String(row[mapping.acousticness] ?? ""), acousticScale)
+          : null;
+        const instrumentalness = mapping.instrumentalness
+          ? normalize01(String(row[mapping.instrumentalness] ?? ""), instrumentalScale)
+          : null;
+        const speechiness = mapping.speechiness
+          ? normalize01(String(row[mapping.speechiness] ?? ""), speechScale)
+          : null;
+
+        const derivedTags = deriveMoodTags({
+          valence,
+          energy10: energyValue,
+          danceability,
+          acousticness,
+          instrumentalness,
+          speechiness,
+        });
+
+        if (derivedTags.length > 0) {
+          mood = mood ? `${mood} · ${derivedTags.join(", ")}` : derivedTags.join(", ");
+        }
+      }
 
       return {
         title,
         artist: toNullableString(artist),
         bpm: bpmValue !== null && bpmValue > 0 ? bpmValue : null,
         musical_key: toNullableString(musicalKey),
-        energy: energyRaw ? normalizeEnergy(energyRaw, energyScale) : null,
-        mood: toNullableString(mood),
+        energy: energyValue,
+        mood,
         notes: toNullableString(notes),
       };
     })
     .filter((row): row is ParsedRow => row !== null);
 
-  return { validRows, invalidCount, energyScale };
+  return { validRows, invalidCount, energyScale, hasFeatureColumns };
 }
 
-function dedupeRows(rows: ParsedRow[]) {
+// Duplicatas dentro do CSV NÃO são mais removidas aqui — só contadas para
+// informação. A resolução de identidade de verdade acontece no servidor,
+// por título+artista já normalizado contra a track real (reaproveita a
+// mesma track em vez de criar duas), e o banco garante que a mesma track
+// nunca vira duas candidatas do mesmo projeto. Filtrar cedo demais no
+// navegador só arriscava descartar linhas que o usuário queria ver
+// processadas.
+function countDuplicates(rows: ParsedRow[]) {
   const seen = new Set<string>();
-  const unique: ParsedRow[] = [];
   let duplicates = 0;
 
   for (const row of rows) {
@@ -253,17 +399,20 @@ function dedupeRows(rows: ParsedRow[]) {
 
     if (seen.has(key)) {
       duplicates += 1;
-      continue;
+    } else {
+      seen.add(key);
     }
-
-    seen.add(key);
-    unique.push(row);
   }
 
-  return {
-    uniqueRows: unique,
-    duplicateCount: duplicates,
-  };
+  return duplicates;
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    result.push(items.slice(i, i + size));
+  }
+  return result;
 }
 
 export default function ImportarCsvClientPage({
@@ -274,32 +423,18 @@ export default function ImportarCsvClientPage({
   const [fileName, setFileName] = useState("");
   const [headers, setHeaders] = useState<string[]>([]);
   const [rawRows, setRawRows] = useState<RawCsvRow[]>([]);
-  const [mapping, setMapping] = useState<MappingState>({
-    title: "",
-    artist: "",
-    bpm: "",
-    musical_key: "",
-    energy: "",
-    mood: "",
-    notes: "",
-  });
+  const [mapping, setMapping] = useState<MappingState>(emptyMapping);
   const [projectId, setProjectId] = useState("");
+  const [autoOrganizeAfter, setAutoOrganizeAfter] = useState(true);
   const [error, setError] = useState("");
   const [resultMessage, setResultMessage] = useState("");
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function resetState() {
     setHeaders([]);
     setRawRows([]);
-    setMapping({
-      title: "",
-      artist: "",
-      bpm: "",
-      musical_key: "",
-      energy: "",
-      mood: "",
-      notes: "",
-    });
+    setMapping(emptyMapping);
   }
 
   function handleFileChange(file: File | null) {
@@ -344,16 +479,19 @@ export default function ImportarCsvClientPage({
   }
 
   const processed = useMemo(() => {
-    const { validRows, invalidCount, energyScale } = buildParsedRows(rawRows, mapping);
-    const { uniqueRows, duplicateCount } = dedupeRows(validRows);
+    const { validRows, invalidCount, energyScale, hasFeatureColumns } = buildParsedRows(
+      rawRows,
+      mapping
+    );
+    const duplicateCount = countDuplicates(validRows);
 
     return {
       validRows,
       invalidCount,
       duplicateCount,
-      uniqueRows,
       energyScale,
-      previewRows: uniqueRows.slice(0, 10),
+      hasFeatureColumns,
+      previewRows: validRows.slice(0, 10),
     };
   }, [rawRows, mapping]);
 
@@ -371,23 +509,59 @@ export default function ImportarCsvClientPage({
       return;
     }
 
-    if (processed.uniqueRows.length === 0) {
-      setError("Nenhuma linha válida restou para importar.");
+    if (processed.validRows.length === 0) {
+      setError("Nenhuma linha válida para importar.");
       return;
     }
 
-    startTransition(async () => {
-      const result = await importTracksFromCsv(
-        processed.uniqueRows,
-        projectId
-      );
+    const batches = chunk(processed.validRows, IMPORT_BATCH_SIZE);
 
-      if (!result.ok) {
-        setError(result.message);
-        return;
+    startTransition(async () => {
+      setProgress({ done: 0, total: processed.validRows.length });
+
+      let created = 0;
+      let reused = 0;
+      let candidatesAdded = 0;
+      let alreadyCandidate = 0;
+      let processedSoFar = 0;
+
+      for (const batch of batches) {
+        const result = await importTracksFromCsv(batch, projectId);
+
+        if (!result.ok) {
+          setError(result.message);
+          setProgress(null);
+          return;
+        }
+
+        created += result.createdCount;
+        reused += result.reusedCount;
+        candidatesAdded += result.candidatesAddedCount;
+        alreadyCandidate += result.alreadyCandidateCount;
+        processedSoFar += batch.length;
+        setProgress({ done: processedSoFar, total: processed.validRows.length });
       }
 
-      setResultMessage(result.message);
+      let message =
+        `${created} track(s) nova(s) criada(s), ${reused} reaproveitada(s) da ` +
+        `biblioteca, ${candidatesAdded} adicionada(s) como candidata(s) neste ` +
+        `projeto (${alreadyCandidate} já estava(m) nele).`;
+
+      if (autoOrganizeAfter && (candidatesAdded > 0 || alreadyCandidate > 0)) {
+        try {
+          const orgResult = await autoOrganizeTracklist(projectId);
+          message += ` Tracklist gerada automaticamente: ${orgResult.totalCount} track(s) no total.`;
+        } catch (orgError) {
+          message +=
+            " Não foi possível gerar a tracklist automaticamente agora " +
+            `(${orgError instanceof Error ? orgError.message : "erro desconhecido"}); ` +
+            "as candidatas foram importadas normalmente, use o botão " +
+            "\"Gerar ordem automática\" na página do projeto.";
+        }
+      }
+
+      setResultMessage(message);
+      setProgress(null);
       setFileName("");
       resetState();
     });
@@ -404,8 +578,10 @@ export default function ImportarCsvClientPage({
             Importar CSV para um projeto
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-300">
-            O CSV cria tracks novas quando necessário, reaproveita as já
-            existentes e adiciona tudo como candidatas do projeto escolhido.
+            Toda linha válida entra na biblioteca (reaproveitando tracks já
+            existentes) e é adicionada como candidata do projeto escolhido —
+            inclusive se parecer duplicada. Arquivos grandes (milhares de
+            linhas) são enviados em lotes automaticamente.
           </p>
 
           <div className="mt-6">
@@ -440,6 +616,21 @@ export default function ImportarCsvClientPage({
               ))}
             </select>
           </div>
+
+          <label className="mt-4 flex items-start gap-3 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={autoOrganizeAfter}
+              onChange={(e) => setAutoOrganizeAfter(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900"
+            />
+            <span>
+              Gerar a ordem da tracklist automaticamente ao final da
+              importação (aprova as candidatas e organiza por compatibilidade
+              — mesma ação do botão &quot;Gerar ordem automática&quot; na
+              página do projeto). Você pode ajustar manualmente depois.
+            </span>
+          </label>
         </div>
 
         <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
@@ -458,9 +649,23 @@ export default function ImportarCsvClientPage({
           </div>
 
           {fileName ? (
-            <p className="mt-3 text-sm text-slate-300">
-              Arquivo carregado: {fileName}
-            </p>
+            <p className="mt-3 text-sm text-slate-300">Arquivo carregado: {fileName}</p>
+          ) : null}
+
+          {progress ? (
+            <div className="mt-4">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className="h-full bg-cyan-300 transition-all"
+                  style={{
+                    width: `${Math.round((progress.done / Math.max(progress.total, 1)) * 100)}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-slate-400">
+                Importando {progress.done} de {progress.total} linha(s)...
+              </p>
+            </div>
           ) : null}
 
           {error ? (
@@ -471,7 +676,12 @@ export default function ImportarCsvClientPage({
 
           {resultMessage ? (
             <div className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-200">
-              {resultMessage}
+              {resultMessage}{" "}
+              {projectId ? (
+                <Link href={`/app/projetos/${projectId}`} className="font-bold underline">
+                  Abrir o projeto →
+                </Link>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -497,46 +707,85 @@ export default function ImportarCsvClientPage({
               Envie um CSV para começar o mapeamento.
             </div>
           ) : (
-            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {TARGET_FIELDS.map((field) => (
-                <div
-                  key={field}
-                  className="rounded-2xl border border-white/10 bg-slate-900/50 p-4"
-                >
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                    {FIELD_LABELS[field]}
-                    {field === "title" ? " *" : ""}
-                  </label>
-
-                  <select
-                    value={mapping[field]}
-                    onChange={(e) =>
-                      setMapping((current) => ({
-                        ...current,
-                        [field]: e.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none"
+            <>
+              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {MAIN_FIELDS.map((field) => (
+                  <div
+                    key={field}
+                    className="rounded-2xl border border-white/10 bg-slate-900/50 p-4"
                   >
-                    <option value="">Não mapear</option>
-                    {headers.map((header) => (
-                      <option key={`${field}-${header}`} value={header}>
-                        {header}
-                      </option>
-                    ))}
-                  </select>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                      {FIELD_LABELS[field]}
+                      {REQUIRED_FIELDS.includes(field) ? " *" : ""}
+                    </label>
+
+                    <select
+                      value={mapping[field]}
+                      onChange={(e) =>
+                        setMapping((current) => ({ ...current, [field]: e.target.value }))
+                      }
+                      className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none"
+                    >
+                      <option value="">Não mapear</option>
+                      {headers.map((header) => (
+                        <option key={`${field}-${header}`} value={header}>
+                          {header}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              <details className="mt-6 rounded-2xl border border-white/10 bg-slate-900/30 p-4">
+                <summary className="cursor-pointer text-sm font-bold text-cyan-200">
+                  Avançado — features de áudio (opcional, usadas para
+                  enriquecer o mood automaticamente)
+                </summary>
+                <p className="mt-3 text-xs leading-5 text-slate-400">
+                  Se o CSV tiver colunas como Valence, Danceability,
+                  Acousticness, Instrumentalness ou Speechiness (padrão
+                  Spotify/Chosic), o MixBrain deriva tags de mood
+                  automaticamente (ex.: &quot;Eufórico&quot;,
+                  &quot;Melancólico&quot;, &quot;Acústico&quot;) combinando
+                  essas colunas com a energia — mesmo que o CSV não tenha uma
+                  coluna de mood/gênero própria.
+                </p>
+                <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {FEATURE_FIELDS.map((field) => (
+                    <div
+                      key={field}
+                      className="rounded-2xl border border-white/10 bg-slate-950/50 p-4"
+                    >
+                      <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                        {FIELD_LABELS[field]}
+                      </label>
+                      <select
+                        value={mapping[field]}
+                        onChange={(e) =>
+                          setMapping((current) => ({ ...current, [field]: e.target.value }))
+                        }
+                        className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none"
+                      >
+                        <option value="">Não mapear</option>
+                        {headers.map((header) => (
+                          <option key={`${field}-${header}`} value={header}>
+                            {header}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </details>
+            </>
           )}
         </div>
 
         <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-black tracking-tight">
-                4. Preview e validação
-              </h2>
+              <h2 className="text-2xl font-black tracking-tight">4. Preview e importação</h2>
               <p className="mt-2 text-sm text-slate-400">
                 Veja o que será processado antes de enviar para a biblioteca e para o projeto.
               </p>
@@ -545,20 +794,18 @@ export default function ImportarCsvClientPage({
             <button
               type="button"
               onClick={handleImport}
-              disabled={processed.uniqueRows.length === 0 || isPending}
+              disabled={processed.validRows.length === 0 || isPending}
               className="rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isPending
                 ? "Importando..."
-                : `Importar ${processed.uniqueRows.length} track(s)`}
+                : `Importar ${processed.validRows.length} track(s)`}
             </button>
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-4">
             <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                Linhas CSV
-              </p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Linhas CSV</p>
               <p className="mt-2 text-3xl font-black">{rawRows.length}</p>
             </div>
 
@@ -566,21 +813,24 @@ export default function ImportarCsvClientPage({
               <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
                 Linhas válidas
               </p>
-              <p className="mt-2 text-3xl font-black text-emerald-400">{processed.validRows.length}</p>
+              <p className="mt-2 text-3xl font-black text-emerald-400">
+                {processed.validRows.length}
+              </p>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                Inválidas
-              </p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Inválidas</p>
               <p className="mt-2 text-3xl font-black text-rose-400">{processed.invalidCount}</p>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                Duplicadas no CSV
+                Repetidas no CSV
               </p>
               <p className="mt-2 text-3xl font-black">{processed.duplicateCount}</p>
+              <p className="mt-1 text-[11px] leading-4 text-slate-500">
+                Só informativo — todas serão enviadas mesmo assim.
+              </p>
             </div>
           </div>
 
@@ -592,6 +842,14 @@ export default function ImportarCsvClientPage({
             </div>
           ) : null}
 
+          {processed.hasFeatureColumns ? (
+            <div className="mt-4 rounded-xl border border-violet-400/20 bg-violet-400/10 p-3 text-xs text-violet-100">
+              Mood sendo enriquecido automaticamente a partir das features de
+              áudio mapeadas na seção &quot;Avançado&quot;. Veja a coluna Mood
+              no preview abaixo.
+            </div>
+          ) : null}
+
           {processed.invalidCount > 0 ? (
             <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-100">
               {processed.invalidCount} linha(s) sem título ficaram de fora
@@ -600,7 +858,7 @@ export default function ImportarCsvClientPage({
             </div>
           ) : null}
 
-          {processed.uniqueRows.length === 0 ? (
+          {processed.validRows.length === 0 ? (
             <div className="mt-6 rounded-2xl border border-dashed border-white/10 p-6 text-center text-slate-400">
               Nenhuma linha pronta para importação.
             </div>
@@ -638,9 +896,9 @@ export default function ImportarCsvClientPage({
             </div>
           )}
 
-          {processed.uniqueRows.length > 10 ? (
+          {processed.validRows.length > 10 ? (
             <p className="mt-3 text-xs text-slate-400">
-              Mostrando 10 de {processed.uniqueRows.length} linhas prontas para importação.
+              Mostrando 10 de {processed.validRows.length} linhas prontas para importação.
             </p>
           ) : null}
         </div>

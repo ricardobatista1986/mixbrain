@@ -120,6 +120,120 @@ export async function addCandidate(projectId: string, formData: FormData) {
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
+/**
+ * Adiciona várias tracks da biblioteca como candidatas de uma vez — usado
+ * pelo painel de sugestões inteligentes (seleção múltipla). Tracks que já
+ * são candidatas do projeto são ignoradas silenciosamente (idempotente).
+ */
+export async function addCandidatesBulk(projectId: string, trackIds: string[]) {
+  const { supabase, userId } = await requireAuth();
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const uniqueTrackIds = [...new Set(trackIds.filter(Boolean))];
+
+  if (uniqueTrackIds.length === 0) {
+    return { added: 0 };
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from("set_candidates")
+    .select("track_id, sort_order")
+    .eq("project_id", projectId);
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  const existingTrackIds = new Set((existing ?? []).map((row) => row.track_id));
+
+  let nextSortOrder =
+    Math.max(0, ...(existing ?? []).map((row) => row.sort_order ?? 0)) + 1;
+
+  const rows = uniqueTrackIds
+    .filter((trackId) => !existingTrackIds.has(trackId))
+    .map((trackId) => ({
+      project_id: projectId,
+      track_id: trackId,
+      user_id: userId,
+      status: "candidate",
+      sort_order: nextSortOrder++,
+      notes: null,
+    }));
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from("set_candidates").insert(rows);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  revalidatePath(`/app/projetos/${projectId}`);
+
+  return { added: rows.length };
+}
+
+/**
+ * Remove uma candidata do projeto (sem tocar na track da biblioteca). Usado
+ * pela caixa de "fora do padrão do set" — o usuário decide, track por
+ * track, se remove ou mantém mesmo assim.
+ */
+export async function removeCandidate(projectId: string, candidateId: string) {
+  const { supabase, userId } = await requireAuth();
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  if (!candidateId) {
+    throw new Error("Candidata inválida.");
+  }
+
+  const { error } = await supabase
+    .from("set_candidates")
+    .delete()
+    .eq("id", candidateId)
+    .eq("project_id", projectId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/app/projetos/${projectId}`);
+}
+
+/**
+ * Remove várias candidatas de uma vez — usado pelo botão "Remover todas as
+ * destacadas" da caixa de fora do padrão.
+ */
+export async function removeCandidatesBulk(
+  projectId: string,
+  candidateIds: string[]
+) {
+  const { supabase, userId } = await requireAuth();
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const uniqueIds = [...new Set(candidateIds.filter(Boolean))];
+
+  if (uniqueIds.length === 0) {
+    return { removed: 0 };
+  }
+
+  const { error, count } = await supabase
+    .from("set_candidates")
+    .delete({ count: "exact" })
+    .in("id", uniqueIds)
+    .eq("project_id", projectId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/app/projetos/${projectId}`);
+
+  return { removed: count ?? 0 };
+}
+
 export async function approveCandidateToTracklist(formData: FormData) {
   const { supabase, userId } = await requireAuth();
 
@@ -591,10 +705,8 @@ function contextFromMoment(
  * (nearest-neighbor) — determinística e auditável pelos scores mostrados
  * depois na tela.
  */
-export async function autoOrganizeTracklist(formData: FormData) {
+export async function autoOrganizeTracklist(projectId: string) {
   const { supabase, userId } = await requireAuth();
-
-  const projectId = String(formData.get("project_id") || "");
 
   if (!projectId) {
     throw new Error("Dados inválidos.");
@@ -764,24 +876,15 @@ export async function autoOrganizeTracklist(formData: FormData) {
     }
   }
 
-  // Fase 3: move os items existentes (ainda em posições negativas) para a
-  // posição final. Cada alvo é único e não colide com o que já foi
-  // ocupado na fase 2 nem com outro item existente ainda pendente.
-  for (let i = 0; i < flatMembers.length; i += 1) {
-    const member = flatMembers[i];
-
-    if (member.kind === "existing") {
-      const { error } = await supabase
-        .from("set_tracklist_items")
-        .update({ position: i + 1 })
-        .eq("id", member.itemId)
-        .eq("project_id", projectId);
-
-      if (error) {
-        throw new Error(error.message);
-      }
-    }
-  }
-
   revalidatePath(`/app/projetos/${projectId}`);
+
+  const newCount = flatMembers.filter((member) => member.kind === "new").length;
+  const blockCount = sequence.filter((unit) => unit.members.length > 1).length;
+
+  return {
+    totalCount: flatMembers.length,
+    newCount,
+    existingCount: flatMembers.length - newCount,
+    blockCount,
+  };
 }

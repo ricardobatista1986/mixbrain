@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 type ImportRow = {
@@ -18,7 +19,21 @@ type LibraryTrack = {
   artist: string;
 };
 
+type ImportChunkResult = {
+  ok: true;
+  createdCount: number;
+  reusedCount: number;
+  candidatesAddedCount: number;
+  alreadyCandidateCount: number;
+};
+
+type ImportChunkError = {
+  ok: false;
+  message: string;
+};
+
 const UNKNOWN_ARTIST = "Artista não informado";
+const DB_CHUNK_SIZE = 200;
 
 function normalizeText(value: string) {
   return value.trim().replace(/\s+/g, " ");
@@ -57,34 +72,40 @@ function chunkArray<T>(items: T[], size: number) {
   return chunks;
 }
 
+/**
+ * Importa um lote de linhas de CSV para a biblioteca e como candidatas de um
+ * projeto. Pensado para ser chamado em lotes pelo cliente (algumas centenas
+ * de linhas por vez) — arquivos com milhares de linhas devem ser divididos
+ * antes de chegar aqui, tanto por causa do limite de tamanho de payload de
+ * Server Actions quanto para dar feedback de progresso ao usuário.
+ *
+ * Dentro de um mesmo lote, tracks e candidatas são gravadas em sub-lotes
+ * intercalados (grava tracks do sub-lote → já grava as candidatas
+ * correspondentes → só então segue pro próximo sub-lote). Isso limita a
+ * "janela de órfãos": se um sub-lote de candidatas falhar, os sub-lotes
+ * anteriores já têm tracks E candidatas gravadas juntas, em vez de deixar
+ * potencialmente milhares de tracks na biblioteca sem nunca terem virado
+ * candidatas do projeto.
+ */
 export async function importTracksFromCsv(
   rows: ImportRow[],
   projectId: string
-) {
+): Promise<ImportChunkResult | ImportChunkError> {
   const supabase = await createClient();
 
   const { data: authData } = await supabase.auth.getClaims();
   const userId = authData?.claims?.sub;
 
   if (!userId) {
-    return {
-      ok: false,
-      message: "Sua sessão expirou. Entre novamente.",
-    };
+    return { ok: false, message: "Sua sessão expirou. Entre novamente." };
   }
 
   if (!projectId) {
-    return {
-      ok: false,
-      message: "Selecione o projeto de destino.",
-    };
+    return { ok: false, message: "Selecione o projeto de destino." };
   }
 
   if (rows.length === 0) {
-    return {
-      ok: false,
-      message: "Não há tracks válidas para importar.",
-    };
+    return { ok: false, message: "Não há tracks válidas para importar." };
   }
 
   const { data: project, error: projectError } = await supabase
@@ -95,38 +116,28 @@ export async function importTracksFromCsv(
     .maybeSingle();
 
   if (projectError || !project) {
-    return {
-      ok: false,
-      message: "Projeto não encontrado ou sem permissão.",
-    };
+    return { ok: false, message: "Projeto não encontrado ou sem permissão." };
   }
 
+  // Colapsa duplicatas dentro do próprio lote (mesmo título+artista) — não
+  // descarta nada do arquivo original, só evita tentar inserir a mesma track
+  // duas vezes na mesma chamada. Duplicatas legítimas entre linhas diferentes
+  // do CSV inteiro continuam todas chegando aqui; é aqui, na resolução de
+  // identidade da track, que elas se encontram — não antes, no navegador.
   const uniqueRows = new Map<string, ImportRow>();
 
   for (const row of rows) {
     const title = normalizeText(row.title);
+    if (!title) continue;
 
-    if (!title) {
-      continue;
-    }
-
-    const artist =
-      normalizeText(row.artist || UNKNOWN_ARTIST) || UNKNOWN_ARTIST;
-
-    uniqueRows.set(makeTrackKey(title, artist), {
-      ...row,
-      title,
-      artist,
-    });
+    const artist = normalizeText(row.artist || UNKNOWN_ARTIST) || UNKNOWN_ARTIST;
+    uniqueRows.set(makeTrackKey(title, artist), { ...row, title, artist });
   }
 
   const cleanRows = [...uniqueRows.values()];
 
   if (cleanRows.length === 0) {
-    return {
-      ok: false,
-      message: "Não há tracks válidas para importar.",
-    };
+    return { ok: false, message: "Não há tracks válidas para importar." };
   }
 
   const { data: libraryRows, error: libraryError } = await supabase
@@ -142,68 +153,20 @@ export async function importTracksFromCsv(
   }
 
   const library = new Map<string, LibraryTrack>();
-
   for (const track of (libraryRows ?? []) as LibraryTrack[]) {
     library.set(makeTrackKey(track.title, track.artist), track);
   }
 
-  const rowsToInsert = cleanRows.filter((row) => {
-    const artist = row.artist || UNKNOWN_ARTIST;
-    return !library.has(makeTrackKey(row.title, artist));
-  });
-
-  const insertedTracks: LibraryTrack[] = [];
-
-  for (const batch of chunkArray(rowsToInsert, 250)) {
-    const { data, error } = await supabase
-      .from("tracks")
-      .insert(
-        batch.map((row) => ({
-          user_id: userId,
-          title: row.title,
-          artist: row.artist || UNKNOWN_ARTIST,
-          bpm: sanitizeBpm(row.bpm),
-          musical_key: row.musical_key,
-          energy: sanitizeEnergy(row.energy),
-          mood: row.mood,
-          notes: row.notes,
-          source_name: "csv",
-          source: "csv",
-        }))
-      )
-      .select("id, title, artist");
-
-    if (error) {
-      return {
-        ok: false,
-        message: `Não foi possível gravar a biblioteca: ${error.message}`,
-      };
-    }
-
-    insertedTracks.push(...((data ?? []) as LibraryTrack[]));
-  }
-
-  for (const track of insertedTracks) {
-    library.set(makeTrackKey(track.title, track.artist), track);
-  }
-
-  const importedTrackIds = cleanRows
-    .map((row) => {
-      const artist = row.artist || UNKNOWN_ARTIST;
-      return library.get(makeTrackKey(row.title, artist))?.id;
-    })
-    .filter((id): id is string => Boolean(id));
-
-  const { data: existingCandidates, error: candidatesError } = await supabase
+  const { data: existingCandidates, error: candidatesQueryError } = await supabase
     .from("set_candidates")
     .select("track_id, sort_order")
     .eq("project_id", projectId)
     .eq("user_id", userId);
 
-  if (candidatesError) {
+  if (candidatesQueryError) {
     return {
       ok: false,
-      message: `Não foi possível consultar as candidatas: ${candidatesError.message}`,
+      message: `Não foi possível consultar as candidatas: ${candidatesQueryError.message}`,
     };
   }
 
@@ -214,43 +177,107 @@ export async function importTracksFromCsv(
   let nextSortOrder =
     Math.max(
       0,
-      ...(existingCandidates ?? []).map(
-        (candidate) => candidate.sort_order ?? 0
-      )
+      ...(existingCandidates ?? []).map((candidate) => candidate.sort_order ?? 0)
     ) + 1;
 
-  const candidateRows = importedTrackIds
-    .filter((trackId) => !existingCandidateTrackIds.has(trackId))
-    .map((trackId) => ({
-      project_id: projectId,
-      track_id: trackId,
-      user_id: userId,
-      status: "candidate",
-      sort_order: nextSortOrder++,
-      notes: null,
-    }));
+  let createdCount = 0;
+  let reusedCount = 0;
+  let candidatesAddedCount = 0;
+  let alreadyCandidateCount = 0;
 
-  for (const batch of chunkArray(candidateRows, 250)) {
-    const { error } = await supabase.from("set_candidates").insert(batch);
+  for (const batch of chunkArray(cleanRows, DB_CHUNK_SIZE)) {
+    const rowsToInsert = batch.filter(
+      (row) => !library.has(makeTrackKey(row.title, row.artist || UNKNOWN_ARTIST))
+    );
 
-    if (error) {
-      return {
-        ok: false,
-        message: `As tracks foram gravadas, mas não puderam entrar como candidatas: ${error.message}`,
-      };
+    if (rowsToInsert.length > 0) {
+      const { data: inserted, error: insertError } = await supabase
+        .from("tracks")
+        .insert(
+          rowsToInsert.map((row) => ({
+            user_id: userId,
+            title: row.title,
+            artist: row.artist || UNKNOWN_ARTIST,
+            bpm: sanitizeBpm(row.bpm),
+            musical_key: row.musical_key,
+            energy: sanitizeEnergy(row.energy),
+            mood: row.mood,
+            notes: row.notes,
+            source_name: "csv",
+            source: "csv",
+          }))
+        )
+        .select("id, title, artist");
+
+      if (insertError) {
+        return {
+          ok: false,
+          message:
+            `Não foi possível gravar a biblioteca: ${insertError.message}. ` +
+            `${createdCount} track(s) e ${candidatesAddedCount} candidata(s) já ` +
+            `tinham sido salvas com sucesso antes deste ponto.`,
+        };
+      }
+
+      for (const track of (inserted ?? []) as LibraryTrack[]) {
+        library.set(makeTrackKey(track.title, track.artist), track);
+        createdCount += 1;
+      }
+    }
+
+    reusedCount += batch.length - rowsToInsert.length;
+
+    const batchTrackIds = batch
+      .map((row) => library.get(makeTrackKey(row.title, row.artist || UNKNOWN_ARTIST))?.id)
+      .filter((id): id is string => Boolean(id));
+
+    const candidateRows = batchTrackIds
+      .filter((trackId) => !existingCandidateTrackIds.has(trackId))
+      .map((trackId) => {
+        existingCandidateTrackIds.add(trackId);
+        return {
+          project_id: projectId,
+          track_id: trackId,
+          user_id: userId,
+          status: "candidate",
+          sort_order: nextSortOrder++,
+          notes: null,
+        };
+      });
+
+    alreadyCandidateCount += batchTrackIds.length - candidateRows.length;
+
+    if (candidateRows.length > 0) {
+      const { error: candidatesInsertError } = await supabase
+        .from("set_candidates")
+        .insert(candidateRows);
+
+      if (candidatesInsertError) {
+        return {
+          ok: false,
+          message:
+            `As tracks foram gravadas, mas um lote de candidatas falhou: ` +
+            `${candidatesInsertError.message}. ${createdCount} track(s) e ` +
+            `${candidatesAddedCount} candidata(s) já tinham sido salvas com ` +
+            `sucesso antes deste ponto — você pode adicioná-las manualmente ` +
+            `pela biblioteca, ou reenviar o CSV (tracks já existentes são ` +
+            `reaproveitadas, não duplicadas).`,
+        };
+      }
+
+      candidatesAddedCount += candidateRows.length;
     }
   }
 
-  const reusedCount = cleanRows.length - rowsToInsert.length;
-  const alreadyCandidateCount = importedTrackIds.length - candidateRows.length;
+  revalidatePath(`/app/projetos/${projectId}`);
+  revalidatePath("/app/tracks");
 
   return {
     ok: true,
-    message:
-      `${rowsToInsert.length} track(s) nova(s) criada(s), ` +
-      `${reusedCount} reaproveitada(s) da biblioteca e ` +
-      `${candidateRows.length} adicionada(s) como candidata(s). ` +
-      `${alreadyCandidateCount} já estava(m) neste projeto.`,
+    createdCount,
+    reusedCount,
+    candidatesAddedCount,
+    alreadyCandidateCount,
   };
 }
 

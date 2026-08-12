@@ -5,10 +5,12 @@ import { EditProjectForm } from "@/components/edit-project-form";
 import { DeleteProjectButton } from "@/components/delete-project-button";
 import { AddCandidateForm } from "@/components/add-candidate-form";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { AutoOrganizeButton } from "@/components/auto-organize-button";
+import { LibrarySuggestions } from "@/components/library-suggestions";
+import { OutlierCandidatesBox } from "@/components/outlier-candidates-box";
 import { createClient } from "@/lib/supabase/server";
 import {
   approveCandidateToTracklist,
-  autoOrganizeTracklist,
   createFrozenBlock,
   dissolveFrozenBlock,
   moveEntityDown,
@@ -445,6 +447,117 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
   const availableTracks =
     allTracks?.filter((track) => !candidateTrackIds.has(track.id)) ?? [];
 
+  // --- Classificação de fora do padrão (BPM destoante) ---------------
+  // Critério primário: faixa de BPM definida no próprio projeto (bpm_min/
+  // bpm_max), com uma margem pequena de tolerância. Sem faixa definida,
+  // cai para um critério estatístico simples: distância da mediana de BPM
+  // das próprias candidatas pendentes. Sem dado de BPM, a track nunca é
+  // classificada como fora do padrão — falta de informação não é motivo
+  // para excluir.
+  const candidateBpms = pendingCandidates
+    .map((candidate) => getTrackFromRelation(candidate.tracks)?.bpm)
+    .filter((bpm): bpm is number => typeof bpm === "number");
+
+  const sortedCandidateBpms = [...candidateBpms].sort((a, b) => a - b);
+  const medianCandidateBpm =
+    sortedCandidateBpms.length > 0
+      ? sortedCandidateBpms[Math.floor(sortedCandidateBpms.length / 2)]
+      : null;
+
+  function classifyBpmFit(bpm: number | null | undefined): {
+    outlier: boolean;
+    reason: string;
+  } {
+    if (typeof bpm !== "number") return { outlier: false, reason: "" };
+
+    if (project.bpm_min !== null && project.bpm_max !== null) {
+      const margin = 3;
+      if (bpm < project.bpm_min - margin || bpm > project.bpm_max + margin) {
+        return {
+          outlier: true,
+          reason: `BPM ${bpm} fora da faixa definida no projeto (${project.bpm_min}–${project.bpm_max})`,
+        };
+      }
+      return { outlier: false, reason: "" };
+    }
+
+    if (medianCandidateBpm !== null && sortedCandidateBpms.length >= 3) {
+      const distance = Math.abs(bpm - medianCandidateBpm);
+      if (distance > medianCandidateBpm * 0.12) {
+        return {
+          outlier: true,
+          reason: `BPM ${bpm} destoa da mediana das candidatas (~${medianCandidateBpm})`,
+        };
+      }
+    }
+
+    return { outlier: false, reason: "" };
+  }
+
+  const classifiedCandidates = pendingCandidates.map((candidate) => {
+    const track = getTrackFromRelation(candidate.tracks);
+    const { outlier, reason } = classifyBpmFit(track?.bpm);
+    return { candidate, track, outlier, reason };
+  });
+
+  const fittingCandidates = classifiedCandidates
+    .filter((entry) => !entry.outlier)
+    .map((entry) => entry.candidate);
+
+  const outlierCandidatesForBox = classifiedCandidates
+    .filter((entry) => entry.outlier && entry.track)
+    .map((entry) => ({
+      candidateId: entry.candidate.id,
+      title: entry.track!.title,
+      artist: entry.track!.artist || "Artista não informado",
+      reason: entry.reason,
+    }));
+
+  // --- Sugestões inteligentes da biblioteca ---------------------------
+  // "Pool" = uma amostra do que já está no projeto (tracklist aprovada +
+  // candidatas pendentes). Cada track disponível na biblioteca recebe um
+  // score médio de compatibilidade contra essa amostra, reaproveitando a
+  // mesma calculateTransitionScore usada em todo o resto da tela.
+  const poolForSuggestions: ScoreTrack[] = [
+    ...tracklistItems
+      .map((item) => getTrackFromRelation(item.tracks))
+      .filter((track): track is ScoreTrack => track !== null),
+    ...pendingCandidates
+      .map((candidate) => getTrackFromRelation(candidate.tracks))
+      .filter((track): track is ScoreTrack => track !== null),
+  ].slice(0, 10);
+
+  function scoreAgainstPool(track: ScoreTrack): number | null {
+    if (poolForSuggestions.length === 0) return null;
+
+    const scores = poolForSuggestions
+      .map((poolTrack) => calculateTransitionScore(poolTrack, track)?.finalScore)
+      .filter((score): score is number => typeof score === "number");
+
+    if (scores.length === 0) return null;
+
+    return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+  }
+
+  const suggestionSourceTracks =
+    poolForSuggestions.length > 0
+      ? availableTracks
+      : [...availableTracks].slice(0, 12);
+
+  const librarySuggestions = suggestionSourceTracks
+    .map((track) => ({
+      id: track.id,
+      title: track.title,
+      artist: track.artist ?? "Artista não informado",
+      bpm: track.bpm,
+      musical_key: track.musical_key,
+      energy: track.energy,
+      mood: track.mood,
+      score: poolForSuggestions.length > 0 ? scoreAgainstPool(track as ScoreTrack) : null,
+    }))
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+    .slice(0, 12);
+
 
   const groupedItems: GroupedItem[] = [];
   let currentBlock: GroupedBlock | null = null;
@@ -578,7 +691,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 </h2>
               </div>
               <span className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-300">
-                {pendingCandidates.length}
+                {fittingCandidates.length}
               </span>
             </div>
 
@@ -586,13 +699,19 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               <AddCandidateForm projectId={id} availableTracks={availableTracks} />
             </div>
 
+            <LibrarySuggestions
+              projectId={id}
+              suggestions={librarySuggestions}
+              hasPool={poolForSuggestions.length > 0}
+            />
+
             <div className="mt-6 space-y-4">
-              {pendingCandidates.length === 0 ? (
+              {fittingCandidates.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-slate-400">
                   Sem candidatas na fila de aprovação.
                 </div>
               ) : (
-                pendingCandidates.map((candidate) => {
+                fittingCandidates.map((candidate) => {
                   const track = Array.isArray(candidate.tracks)
                     ? candidate.tracks[0]
                     : candidate.tracks;
@@ -644,6 +763,11 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 })
               )}
             </div>
+
+            <OutlierCandidatesBox
+              projectId={id}
+              candidates={outlierCandidatesForBox}
+            />
           </section>
 
           <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
@@ -670,16 +794,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 mudam de posição no set. Você pode ajustar manualmente
                 depois.
               </p>
-              <form action={autoOrganizeTracklist} className="mt-3">
-                <input type="hidden" name="project_id" value={id} />
-                <ConfirmSubmitButton
-                  confirmLabel="Confirmar e organizar"
-                  className="rounded-lg bg-indigo-400 px-4 py-2 text-xs font-bold text-slate-950 transition hover:bg-indigo-300"
-                  confirmClassName="rounded-lg bg-indigo-300 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-indigo-200"
-                >
-                  Gerar ordem automática
-                </ConfirmSubmitButton>
-              </form>
+              <AutoOrganizeButton projectId={id} />
             </div>
 
             <form id="create-block-form" action={createFrozenBlock}>
