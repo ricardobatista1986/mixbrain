@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { addCandidate } from "@/app/app/projetos/[id]/actions";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { addCandidatesBulk } from "@/app/app/projetos/[id]/actions";
 
 type Track = {
   id: string;
@@ -18,28 +19,70 @@ type AddCandidateFormProps = {
   availableTracks: Track[];
 };
 
+function matchesQuery(track: Track, query: string) {
+  if (!query) return true;
+  const haystack = `${track.artist} ${track.title} ${track.musical_key ?? ""} ${
+    track.bpm ?? ""
+  }`.toLocaleLowerCase("pt-BR");
+  return haystack.includes(query.toLocaleLowerCase("pt-BR"));
+}
+
 export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFormProps) {
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [keyFilter, setKeyFilter] = useState("");
+  const [bpmMin, setBpmMin] = useState("");
+  const [bpmMax, setBpmMax] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  function handleSubmit(formData: FormData) {
+  const availableKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const track of availableTracks) {
+      if (track.musical_key) keys.add(track.musical_key);
+    }
+    return [...keys].sort();
+  }, [availableTracks]);
+
+  const filtered = useMemo(() => {
+    const min = bpmMin.trim() ? Number(bpmMin) : null;
+    const max = bpmMax.trim() ? Number(bpmMax) : null;
+
+    return availableTracks
+      .filter((track) => matchesQuery(track, query))
+      .filter((track) => !keyFilter || track.musical_key === keyFilter)
+      .filter((track) => {
+        if (min !== null && (track.bpm === null || track.bpm < min)) return false;
+        if (max !== null && (track.bpm === null || track.bpm > max)) return false;
+        return true;
+      })
+      .sort((a, b) => a.artist.localeCompare(b.artist, "pt-BR") || a.title.localeCompare(b.title, "pt-BR"));
+  }, [availableTracks, query, keyFilter, bpmMin, bpmMax]);
+
+  function toggle(trackId: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(trackId)) next.delete(trackId);
+      else next.add(trackId);
+      return next;
+    });
+  }
+
+  function handleAddSelected() {
     setErrorMessage("");
     setSuccessMessage("");
 
     startTransition(async () => {
       try {
-        await addCandidate(projectId, formData);
-        setSuccessMessage("Candidata adicionada com sucesso.");
-        const form = document.getElementById(
-          "add-candidate-form"
-        ) as HTMLFormElement | null;
-        form?.reset();
+        const result = await addCandidatesBulk(projectId, [...selected]);
+        setSuccessMessage(`${result.added} track(s) adicionada(s) como candidata(s).`);
+        setSelected(new Set());
+        router.refresh();
       } catch (error) {
         setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Não foi possível adicionar a candidata.",
+          error instanceof Error ? error.message : "Não foi possível adicionar as tracks."
         );
       }
     });
@@ -71,80 +114,136 @@ export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFor
 
   return (
     <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-cyan-950/20">
-      <div className="max-w-3xl">
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-300">
-          Adicionar candidata
-        </p>
-        <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-50">
-          Selecionar track da biblioteca
-        </h2>
-        <p className="mt-3 text-sm leading-7 text-slate-400 sm:text-base">
-          Escolha uma track da sua biblioteca para adicioná-la como candidata
-          neste projeto.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-2xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-300">
+            Adicionar candidata
+          </p>
+          <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-50">
+            Buscar na biblioteca
+          </h2>
+          <p className="mt-3 text-sm leading-7 text-slate-400">
+            Busque por artista, título, key ou BPM. Marque quantas quiser e
+            adicione todas de uma vez.
+          </p>
+        </div>
+
+        {selected.size > 0 ? (
+          <button
+            type="button"
+            onClick={handleAddSelected}
+            disabled={isPending}
+            className="rounded-xl bg-cyan-300 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isPending ? "Adicionando..." : `Adicionar ${selected.size} selecionada(s)`}
+          </button>
+        ) : null}
       </div>
 
-      <form id="add-candidate-form" action={handleSubmit} className="mt-8 grid gap-5">
-        <label className="block">
-          <span className="mb-2 block text-sm font-medium text-slate-300">
-            Track
-          </span>
-          <select
-            name="trackId"
-            required
-            defaultValue=""
-            className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/20"
-          >
-            <option value="" disabled>
-              Selecione uma track...
+      <div className="mt-6 grid gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr]">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar por artista, título, key, BPM..."
+          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-300"
+          autoComplete="off"
+        />
+        <select
+          value={keyFilter}
+          onChange={(e) => setKeyFilter(e.target.value)}
+          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none"
+        >
+          <option value="">Todas as keys</option>
+          {availableKeys.map((key) => (
+            <option key={key} value={key}>
+              {key}
             </option>
-            {availableTracks.map((track) => (
-              <option key={track.id} value={track.id}>
-                {track.title} — {track.artist}
-                {track.bpm ? ` (${track.bpm} BPM)` : ""}
-                {track.energy ? ` [E${track.energy}]` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+          ))}
+        </select>
+        <input
+          type="number"
+          value={bpmMin}
+          onChange={(e) => setBpmMin(e.target.value)}
+          placeholder="BPM min"
+          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none"
+        />
+        <input
+          type="number"
+          value={bpmMax}
+          onChange={(e) => setBpmMax(e.target.value)}
+          placeholder="BPM max"
+          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none"
+        />
+      </div>
 
-        <label className="block">
-          <span className="mb-2 block text-sm font-medium text-slate-300">
-            Observações (opcional)
-          </span>
-          <textarea
-            name="notes"
-            rows={3}
-            placeholder="Ex.: boa para abertura; transição suave para a próxima..."
-            className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/20"
-          />
-        </label>
+      {(query || keyFilter || bpmMin || bpmMax) && (
+        <p className="mt-2 text-xs text-slate-500">
+          {filtered.length} de {availableTracks.length} tracks correspondem ao filtro.
+        </p>
+      )}
 
-        {errorMessage ? (
-          <p
-            role="alert"
-            className="rounded-xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-100"
-          >
-            {errorMessage}
+      {errorMessage ? (
+        <p
+          role="alert"
+          className="mt-4 rounded-xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-100"
+        >
+          {errorMessage}
+        </p>
+      ) : null}
+
+      {successMessage ? (
+        <p className="mt-4 rounded-xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">
+          {successMessage}
+        </p>
+      ) : null}
+
+      <div className="mt-5 max-h-[420px] space-y-1.5 overflow-y-auto pr-1">
+        {filtered.length === 0 ? (
+          <p className="py-6 text-center text-sm text-slate-500">
+            Nenhuma track encontrada com esse filtro.
+          </p>
+        ) : (
+          filtered.slice(0, 200).map((track) => {
+            const isSelected = selected.has(track.id);
+            return (
+              <label
+                key={track.id}
+                className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2 transition ${
+                  isSelected
+                    ? "border-cyan-300/50 bg-cyan-300/10"
+                    : "border-white/5 bg-slate-950/40 hover:border-white/15"
+                }`}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggle(track.id)}
+                    className="h-4 w-4 shrink-0 rounded border-white/20 bg-slate-900"
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-100">
+                      {track.artist} <span className="text-slate-500">—</span>{" "}
+                      {track.title}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2 text-[11px] text-slate-400">
+                  {track.bpm ? <span>{track.bpm} BPM</span> : null}
+                  {track.musical_key ? <span>{track.musical_key}</span> : null}
+                  {track.energy ? <span>E{track.energy}</span> : null}
+                </div>
+              </label>
+            );
+          })
+        )}
+        {filtered.length > 200 ? (
+          <p className="pt-2 text-center text-xs text-slate-500">
+            Mostrando as primeiras 200 de {filtered.length} — refine a busca para ver outras.
           </p>
         ) : null}
-
-        {successMessage ? (
-          <p className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">
-            {successMessage}
-          </p>
-        ) : null}
-
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="submit"
-            disabled={isPending}
-            className="rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isPending ? "Adicionando..." : "Adicionar candidata"}
-          </button>
-        </div>
-      </form>
+      </div>
     </section>
   );
 }

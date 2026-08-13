@@ -34,6 +34,7 @@ type ImportChunkError = {
 
 const UNKNOWN_ARTIST = "Artista não informado";
 const DB_CHUNK_SIZE = 200;
+const CANDIDATE_SUB_CHUNK_SIZE = 40;
 
 function normalizeText(value: string) {
   return value.trim().replace(/\s+/g, " ");
@@ -191,37 +192,48 @@ export async function importTracksFromCsv(
     );
 
     if (rowsToInsert.length > 0) {
-      const { data: inserted, error: insertError } = await supabase
-        .from("tracks")
-        .insert(
-          rowsToInsert.map((row) => ({
-            user_id: userId,
-            title: row.title,
-            artist: row.artist || UNKNOWN_ARTIST,
-            bpm: sanitizeBpm(row.bpm),
-            musical_key: row.musical_key,
-            energy: sanitizeEnergy(row.energy),
-            mood: row.mood,
-            notes: row.notes,
-            source_name: "csv",
-            source: "csv",
-          }))
-        )
-        .select("id, title, artist");
+      const trackErrors: string[] = [];
 
-      if (insertError) {
+      for (const trackSubChunk of chunkArray(rowsToInsert, CANDIDATE_SUB_CHUNK_SIZE)) {
+        const { data: inserted, error: insertError } = await supabase
+          .from("tracks")
+          .insert(
+            trackSubChunk.map((row) => ({
+              user_id: userId,
+              title: row.title,
+              artist: row.artist || UNKNOWN_ARTIST,
+              bpm: sanitizeBpm(row.bpm),
+              musical_key: row.musical_key,
+              energy: sanitizeEnergy(row.energy),
+              mood: row.mood,
+              notes: row.notes,
+              source_name: "csv",
+              source: "csv",
+            }))
+          )
+          .select("id, title, artist");
+
+        if (insertError) {
+          trackErrors.push(insertError.message);
+          continue;
+        }
+
+        for (const track of (inserted ?? []) as LibraryTrack[]) {
+          library.set(makeTrackKey(track.title, track.artist), track);
+          createdCount += 1;
+        }
+      }
+
+      if (trackErrors.length > 0) {
         return {
           ok: false,
           message:
-            `Não foi possível gravar a biblioteca: ${insertError.message}. ` +
-            `${createdCount} track(s) e ${candidatesAddedCount} candidata(s) já ` +
-            `tinham sido salvas com sucesso antes deste ponto.`,
+            `${createdCount} track(s) e ${candidatesAddedCount} candidata(s) ` +
+            `foram gravadas com sucesso antes de um problema. ` +
+            `${trackErrors.length} sub-lote(s) de tracks falharam: ` +
+            `${trackErrors[0]}. Reenvie o CSV — tracks já criadas são ` +
+            `reaproveitadas, não duplicadas.`,
         };
-      }
-
-      for (const track of (inserted ?? []) as LibraryTrack[]) {
-        library.set(makeTrackKey(track.title, track.artist), track);
-        createdCount += 1;
       }
     }
 
@@ -247,25 +259,42 @@ export async function importTracksFromCsv(
 
     alreadyCandidateCount += batchTrackIds.length - candidateRows.length;
 
-    if (candidateRows.length > 0) {
+    // Candidatas são inseridas em sub-lotes pequenos (40) e, se um sub-lote
+    // falhar, continuamos tentando os próximos em vez de abortar tudo — uma
+    // falha pontual (ex.: conflito transitório) não deve custar centenas de
+    // tracks que já teriam entrado como candidatas com sucesso. Erros são
+    // acumulados e reportados no final, não escondidos.
+    const candidateErrors: string[] = [];
+
+    for (const candidateSubChunk of chunkArray(candidateRows, CANDIDATE_SUB_CHUNK_SIZE)) {
       const { error: candidatesInsertError } = await supabase
         .from("set_candidates")
-        .insert(candidateRows);
+        .insert(candidateSubChunk);
 
       if (candidatesInsertError) {
-        return {
-          ok: false,
-          message:
-            `As tracks foram gravadas, mas um lote de candidatas falhou: ` +
-            `${candidatesInsertError.message}. ${createdCount} track(s) e ` +
-            `${candidatesAddedCount} candidata(s) já tinham sido salvas com ` +
-            `sucesso antes deste ponto — você pode adicioná-las manualmente ` +
-            `pela biblioteca, ou reenviar o CSV (tracks já existentes são ` +
-            `reaproveitadas, não duplicadas).`,
-        };
+        candidateErrors.push(candidatesInsertError.message);
+        // Essas track_ids não viraram candidatas de fato — tira do "já
+        // marcado como candidato" pra não mascarar a falha no relatório.
+        for (const row of candidateSubChunk) {
+          existingCandidateTrackIds.delete(row.track_id);
+        }
+        continue;
       }
 
-      candidatesAddedCount += candidateRows.length;
+      candidatesAddedCount += candidateSubChunk.length;
+    }
+
+    if (candidateErrors.length > 0) {
+      return {
+        ok: false,
+        message:
+          `${createdCount} track(s) gravadas e ${candidatesAddedCount} ` +
+          `candidata(s) adicionadas com sucesso antes de um problema. ` +
+          `${candidateErrors.length} sub-lote(s) de candidatas falharam: ` +
+          `${candidateErrors[0]}. Reenvie o CSV para tentar novamente — ` +
+          `tracks já existentes são reaproveitadas, não duplicadas, e ` +
+          `candidatas já adicionadas não são repetidas.`,
+      };
     }
   }
 

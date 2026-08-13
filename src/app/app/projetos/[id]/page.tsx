@@ -8,6 +8,12 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { AutoOrganizeButton } from "@/components/auto-organize-button";
 import { LibrarySuggestions } from "@/components/library-suggestions";
 import { OutlierCandidatesBox } from "@/components/outlier-candidates-box";
+import { SetVersionsPanel } from "@/components/set-versions-panel";
+import { ExportTracklistButtons, type ExportRow } from "@/components/export-tracklist-buttons";
+import {
+  TransitionDecisionControls,
+  type TransitionDecision,
+} from "@/components/transition-decision-controls";
 import { createClient } from "@/lib/supabase/server";
 import {
   approveCandidateToTracklist,
@@ -237,8 +243,16 @@ function MixBrainLegend() {
 
 function TransitionScoreCard({
   score,
+  projectId,
+  fromTrackId,
+  toTrackId,
+  decision,
 }: {
   score: TransitionScore | null;
+  projectId?: string;
+  fromTrackId?: string;
+  toTrackId?: string;
+  decision?: TransitionDecision | null;
 }) {
   if (!score) return null;
 
@@ -256,6 +270,17 @@ function TransitionScoreCard({
           </div>
 
           <div className="flex items-center gap-2">
+            {decision ? (
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${
+                  decision.status === "approved"
+                    ? "border-emerald-300/40 text-emerald-200"
+                    : "border-rose-300/40 text-rose-200"
+                }`}
+              >
+                {decision.status === "approved" ? "✓ aprovada" : "✗ rejeitada"}
+              </span>
+            ) : null}
             <span className="rounded-full border border-current/20 px-3 py-1 text-xs font-bold">
               {score.label}
             </span>
@@ -302,6 +327,15 @@ function TransitionScoreCard({
             </div>
           ))}
         </div>
+
+        {projectId && fromTrackId && toTrackId ? (
+          <TransitionDecisionControls
+            projectId={projectId}
+            fromTrackId={fromTrackId}
+            toTrackId={toTrackId}
+            decision={decision ?? null}
+          />
+        ) : null}
       </div>
     </details>
   );
@@ -441,6 +475,41 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
   const tracklistTrackIds = new Set(tracklistItems.map((item) => item.track_id));
   const candidateTrackIds = new Set((candidates ?? []).map((candidate) => candidate.track_id));
 
+  // --- Decisões de aprovação/rejeição de transição já registradas -----
+  // approved_transitions referencia set_candidates, não tracks direto, então
+  // resolvemos candidate_id -> track_id em JS usando os candidatos já
+  // carregados, em vez de um join ambíguo (duas FKs pra mesma tabela).
+  const { data: transitionDecisionRows } = await supabase
+    .from("approved_transitions")
+    .select("from_candidate_id, to_candidate_id, status, explanation")
+    .eq("project_id", id);
+
+  const candidateTrackById = new Map(
+    (candidates ?? []).map((candidate) => [candidate.id, candidate.track_id])
+  );
+
+  const transitionDecisionByTrackPair = new Map<string, TransitionDecision>();
+
+  for (const row of transitionDecisionRows ?? []) {
+    const fromTrackId = candidateTrackById.get(row.from_candidate_id);
+    const toTrackId = candidateTrackById.get(row.to_candidate_id);
+
+    if (fromTrackId && toTrackId && (row.status === "approved" || row.status === "rejected")) {
+      transitionDecisionByTrackPair.set(`${fromTrackId}:${toTrackId}`, {
+        status: row.status,
+        explanation: row.explanation,
+      });
+    }
+  }
+
+  function getTransitionDecision(
+    fromTrackId: string | undefined,
+    toTrackId: string | undefined
+  ): TransitionDecision | null {
+    if (!fromTrackId || !toTrackId) return null;
+    return transitionDecisionByTrackPair.get(`${fromTrackId}:${toTrackId}`) ?? null;
+  }
+
   const pendingCandidates =
     candidates?.filter((candidate) => !tracklistTrackIds.has(candidate.track_id)) ?? [];
 
@@ -525,7 +594,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
     ...pendingCandidates
       .map((candidate) => getTrackFromRelation(candidate.tracks))
       .filter((track): track is ScoreTrack => track !== null),
-  ].slice(0, 10);
+  ].slice(0, 15);
 
   function scoreAgainstPool(track: ScoreTrack): number | null {
     if (poolForSuggestions.length === 0) return null;
@@ -544,7 +613,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
       ? availableTracks
       : [...availableTracks].slice(0, 12);
 
-  const librarySuggestions = suggestionSourceTracks
+  const rankedSuggestions = suggestionSourceTracks
     .map((track) => ({
       id: track.id,
       title: track.title,
@@ -555,7 +624,23 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
       mood: track.mood,
       score: poolForSuggestions.length > 0 ? scoreAgainstPool(track as ScoreTrack) : null,
     }))
-    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+    // Sem pool ainda (projeto vazio), não há score real — mantém a ordem
+    // recente sem filtrar por qualidade. Com pool, corta sugestões fracas:
+    // "sugestão" só vale a pena mostrar se realmente encaixa.
+    .filter((suggestion) => poolForSuggestions.length === 0 || (suggestion.score ?? 0) >= 55)
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+
+  // Diversidade: no máximo 2 sugestões do mesmo artista, pra não lotar a
+  // lista com o catálogo inteiro de um único artista quando ele domina a
+  // biblioteca (comum em bases importadas de um só produtor/label).
+  const suggestionCountByArtist = new Map<string, number>();
+  const librarySuggestions = rankedSuggestions
+    .filter((suggestion) => {
+      const count = suggestionCountByArtist.get(suggestion.artist) ?? 0;
+      if (count >= 2) return false;
+      suggestionCountByArtist.set(suggestion.artist, count + 1);
+      return true;
+    })
     .slice(0, 12);
 
 
@@ -585,6 +670,59 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
       });
     }
   }
+
+  const exportRows: ExportRow[] = groupedItems.flatMap((group) => {
+    if (group.isBlock) {
+      return group.items
+        .map((item): ExportRow | null => {
+          const track = getTrackFromRelation(item.tracks);
+          if (!track) return null;
+          return {
+            position: item.position,
+            title: track.title,
+            artist: track.artist || "Artista não informado",
+            bpm: track.bpm,
+            musical_key: track.musical_key,
+            energy: track.energy,
+            mood: track.mood,
+            blockName: group.block_name,
+          };
+        })
+        .filter((row): row is ExportRow => row !== null);
+    }
+
+    const track = getTrackFromRelation(group.item.tracks);
+    if (!track) return [];
+
+    const row: ExportRow = {
+      position: group.item.position,
+      title: track.title,
+      artist: track.artist || "Artista não informado",
+      bpm: track.bpm,
+      musical_key: track.musical_key,
+      energy: track.energy,
+      mood: track.mood,
+      blockName: null,
+    };
+
+    return [row];
+  });
+
+  const { data: rawVersions } = await supabase
+    .from("set_versions")
+    .select("id, name, created_at, snapshot")
+    .eq("project_id", id)
+    .order("created_at", { ascending: false });
+
+  const setVersions = (rawVersions ?? []).map((version) => {
+    const snapshot = version.snapshot as { items?: unknown[] } | null;
+    return {
+      id: version.id,
+      name: version.name,
+      createdAt: version.created_at,
+      trackCount: Array.isArray(snapshot?.items) ? snapshot.items.length : 0,
+    };
+  });
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
@@ -690,9 +828,19 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                   Tracks disponíveis
                 </h2>
               </div>
-              <span className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-300">
-                {fittingCandidates.length}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-300">
+                  {fittingCandidates.length}
+                </span>
+                {outlierCandidatesForBox.length > 0 ? (
+                  <a
+                    href="#outliers"
+                    className="rounded-full border border-amber-300/40 bg-amber-300/10 px-3 py-1 text-xs font-bold text-amber-200 transition hover:bg-amber-300/20"
+                  >
+                    ⚠ {outlierCandidatesForBox.length} para revisar ↓
+                  </a>
+                ) : null}
+              </div>
             </div>
 
             <div className="mt-6">
@@ -754,9 +902,11 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                         <span className="rounded-full border border-white/10 px-3 py-1">
                           Energia: {track.energy ?? "—"}
                         </span>
-                        <span className="rounded-full border border-white/10 px-3 py-1">
-                          Mood: {track.mood ?? "—"}
-                        </span>
+                        {track.mood ? (
+                          <span className="rounded-full border border-violet-300/20 bg-violet-300/10 px-3 py-1 text-violet-200">
+                            {track.mood}
+                          </span>
+                        ) : null}
                       </div>
                     </article>
                   );
@@ -764,14 +914,16 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               )}
             </div>
 
-            <OutlierCandidatesBox
-              projectId={id}
-              candidates={outlierCandidatesForBox}
-            />
+            <div id="outliers">
+              <OutlierCandidatesBox
+                projectId={id}
+                candidates={outlierCandidatesForBox}
+              />
+            </div>
           </section>
 
           <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
                   Tracklist
@@ -780,6 +932,8 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                   Sequência e Blocos
                 </h2>
               </div>
+
+              <ExportTracklistButtons rows={exportRows} projectName={project.name} />
             </div>
 
             <div className="mt-4 rounded-2xl border border-indigo-400/20 bg-indigo-400/[0.06] p-4">
@@ -939,7 +1093,13 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                   </div>
                                 </article>
 
-                                <TransitionScoreCard score={transitionScore} />
+                                <TransitionScoreCard
+                                  score={transitionScore}
+                                  projectId={id}
+                                  fromTrackId={track.id}
+                                  toTrackId={nextTrack?.id}
+                                  decision={getTransitionDecision(track.id, nextTrack?.id)}
+                                />
                               </div>
                             );
                           })}
@@ -1058,13 +1218,27 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                         </div>
                       </article>
 
-                      <TransitionScoreCard score={transitionScore} />
+                      <TransitionScoreCard
+                        score={transitionScore}
+                        projectId={id}
+                        fromTrackId={track.id}
+                        toTrackId={nextTrack?.id}
+                        decision={getTransitionDecision(track.id, nextTrack?.id)}
+                      />
                     </div>
                   );
                 })
               )}
             </div>
           </section>
+        </div>
+
+        <div className="mt-8">
+          <SetVersionsPanel
+            projectId={id}
+            versions={setVersions}
+            tracklistEmpty={groupedItems.length === 0}
+          />
         </div>
       </section>
     </main>

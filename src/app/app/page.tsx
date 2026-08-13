@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/logout-button";
 import { CreateProjectForm } from "@/components/create-project-form";
 import { DeleteProjectButton } from "@/components/delete-project-button";
+import { ProjectCardActions } from "@/components/project-card-actions";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AppPage() {
@@ -17,12 +18,15 @@ export default async function AppPage() {
 
   const { data: projects, error } = await supabase
     .from("set_projects")
-    .select("id, name, description, target_duration_minutes, created_at")
+    .select("id, name, description, target_duration_minutes, created_at, archived_at")
     .order("created_at", { ascending: false });
 
   if (error) {
     throw new Error(error.message);
   }
+
+  const activeProjects = (projects ?? []).filter((project) => !project.archived_at);
+  const archivedProjects = (projects ?? []).filter((project) => project.archived_at);
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100 sm:px-10">
@@ -139,13 +143,13 @@ export default async function AppPage() {
               </div>
 
               <div className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-400">
-                {projects?.length ?? 0} projeto(s)
+                {activeProjects.length} projeto(s)
               </div>
             </div>
 
-            {projects && projects.length > 0 ? (
+            {activeProjects.length > 0 ? (
               <div className="mt-8 space-y-4">
-                {projects.map((project) => (
+                {activeProjects.map((project) => (
                   <div
                     key={project.id}
                     className="rounded-2xl border border-white/10 bg-slate-950/70 p-5 transition hover:border-cyan-300/40"
@@ -178,7 +182,8 @@ export default async function AppPage() {
                       </p>
                     </Link>
 
-                    <div className="mt-4 flex justify-end border-t border-white/5 pt-4">
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/5 pt-4">
+                      <ProjectCardActions projectId={project.id} archived={false} />
                       <DeleteProjectButton
                         projectId={project.id}
                         projectName={project.name}
@@ -194,6 +199,39 @@ export default async function AppPage() {
                 o primeiro projeto do MixBrain.
               </div>
             )}
+
+            {archivedProjects.length > 0 ? (
+              <details className="mt-8 rounded-2xl border border-white/10 bg-slate-950/40">
+                <summary className="cursor-pointer list-none px-5 py-3 text-sm font-bold text-slate-400 transition hover:text-slate-200">
+                  Arquivados ({archivedProjects.length})
+                </summary>
+                <div className="space-y-3 border-t border-white/10 p-5">
+                  {archivedProjects.map((project) => (
+                    <div
+                      key={project.id}
+                      className="rounded-xl border border-white/10 bg-slate-950/60 p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <Link
+                          href={`/app/projetos/${project.id}`}
+                          className="text-sm font-semibold text-slate-300 hover:text-cyan-200"
+                        >
+                          {project.name}
+                        </Link>
+                        <div className="flex items-center gap-2">
+                          <ProjectCardActions projectId={project.id} archived />
+                          <DeleteProjectButton
+                            projectId={project.id}
+                            projectName={project.name}
+                            variant="icon"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ) : null}
           </section>
         </div>
       </div>

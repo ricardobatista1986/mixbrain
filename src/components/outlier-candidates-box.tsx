@@ -63,17 +63,22 @@ export function OutlierCandidatesBox({
   }
 
   return (
-    <section className="mt-6 rounded-2xl border border-amber-400/25 bg-amber-400/[0.05] p-5">
+    <section className="mt-6 rounded-2xl border-2 border-amber-400/50 bg-amber-400/[0.08] p-5 shadow-lg shadow-amber-950/20">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-bold text-amber-100">
-            Fora do padrão do set ({candidates.length})
-          </p>
-          <p className="mt-1 text-xs leading-5 text-amber-200/70">
-            BPM bem diferente do restante das candidatas ou da faixa definida
-            no projeto. Não foram removidas automaticamente — decida track por
-            track, ou remova todas de uma vez.
-          </p>
+        <div className="flex items-start gap-3">
+          <span className="text-2xl" aria-hidden="true">
+            ⚠️
+          </span>
+          <div>
+            <p className="text-sm font-black text-amber-100">
+              Fora do padrão do set ({candidates.length})
+            </p>
+            <p className="mt-1 text-xs leading-5 text-amber-200/80">
+              BPM bem diferente do restante das candidatas ou da faixa definida
+              no projeto. Não foram removidas automaticamente — decida track por
+              track, ou remova todas de uma vez.
+            </p>
+          </div>
         </div>
 
         {!confirmingAll ? (

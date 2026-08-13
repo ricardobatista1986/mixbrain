@@ -693,7 +693,11 @@ export default function ImportarCsvClientPage({
             Apenas o Título é obrigatório. BPM, energia e demais campos numéricos
             que não puderem ser lidos ficam em branco, mas não descartam a track.
             Energia em escala 0–100 é detectada e convertida automaticamente
-            para a escala 1–10 usada no MixBrain.
+            para a escala 1–10 usada no MixBrain. Mood é só um critério
+            <strong> a mais</strong> no score de compatibilidade — quando
+            presente, ajuda a comparar tracks; quando ausente, o sistema
+            simplesmente ignora esse fator e usa os outros (harmonia, energia,
+            BPM), sem penalizar a track por não ter mood definido.
           </p>
 
           {headers.length > 0 ? (

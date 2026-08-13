@@ -85,7 +85,7 @@ export function LibrarySuggestions({
           </p>
           <p className="mt-1 text-xs leading-5 text-emerald-200/70">
             {hasPool
-              ? "Tracks da sua biblioteca que combinam bem com o que já está neste projeto (harmonia, energia, BPM e mood)."
+              ? "Tracks da sua biblioteca com boa compatibilidade (harmonia, energia, BPM e mood, quando disponível) com o que já está neste projeto. Só aparecem aqui encaixes de pelo menos 55% — e no máximo 2 por artista, pra não lotar a lista."
               : "O projeto ainda não tem candidatas para comparar — mostrando as tracks mais recentes da biblioteca."}
           </p>
         </div>

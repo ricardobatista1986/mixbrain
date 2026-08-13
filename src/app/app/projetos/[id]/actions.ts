@@ -888,3 +888,372 @@ export async function autoOrganizeTracklist(projectId: string) {
     blockCount,
   };
 }
+
+type VersionSnapshot = {
+  version: 1;
+  blocks: { tempId: string; name: string }[];
+  items: {
+    track_id: string;
+    position: number;
+    curatorial_moment: string | null;
+    curatorial_intent: string | null;
+    block_temp_id: string | null;
+  }[];
+};
+
+/**
+ * Salva um snapshot da tracklist atual (tracks, ordem, blocos congelados e
+ * momentos curatoriais) como uma versão nomeada. Candidatas não entram no
+ * snapshot — só o que já está aprovado na tracklist.
+ */
+export async function saveSetVersion(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
+  const projectId = String(formData.get("project_id") || "");
+  const name = String(formData.get("name") || "").trim();
+
+  if (!projectId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  if (!name) {
+    throw new Error("Dê um nome para a versão.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { data: items, error: itemsError } = await supabase
+    .from("set_tracklist_items")
+    .select(
+      `
+      track_id,
+      position,
+      curatorial_moment,
+      curatorial_intent,
+      block_id,
+      set_blocks ( name )
+    `
+    )
+    .eq("project_id", projectId)
+    .order("position", { ascending: true });
+
+  if (itemsError) {
+    throw new Error(itemsError.message);
+  }
+
+  if (!items || items.length === 0) {
+    throw new Error("A tracklist está vazia — não há nada para salvar como versão.");
+  }
+
+  const blockNameById = new Map<string, string>();
+
+  for (const item of items) {
+    if (!item.block_id) continue;
+    const blockRel = item.set_blocks as unknown;
+    const blockObj = Array.isArray(blockRel) ? blockRel[0] : blockRel;
+    const name =
+      blockObj && typeof blockObj === "object" && "name" in blockObj
+        ? (blockObj as { name: unknown }).name
+        : null;
+    if (typeof name === "string") {
+      blockNameById.set(item.block_id, name);
+    }
+  }
+
+  const snapshot: VersionSnapshot = {
+    version: 1,
+    blocks: [...blockNameById.entries()].map(([tempId, blockName]) => ({
+      tempId,
+      name: blockName,
+    })),
+    items: items.map((item) => ({
+      track_id: item.track_id,
+      position: item.position,
+      curatorial_moment: item.curatorial_moment,
+      curatorial_intent: item.curatorial_intent,
+      block_temp_id: item.block_id,
+    })),
+  };
+
+  const { error } = await supabase.from("set_versions").insert({
+    project_id: projectId,
+    name,
+    snapshot,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/app/projetos/${projectId}`);
+}
+
+/**
+ * Restaura uma versão salva: substitui a tracklist e os blocos atuais pelo
+ * conteúdo do snapshot. Candidatas não são afetadas. Tracks que não existem
+ * mais na biblioteca (excluídas depois que a versão foi salva) são
+ * silenciosamente ignoradas na restauração, em vez de derrubar a operação
+ * inteira.
+ */
+export async function restoreSetVersion(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
+  const projectId = String(formData.get("project_id") || "");
+  const versionId = String(formData.get("version_id") || "");
+
+  if (!projectId || !versionId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { data: version, error: versionError } = await supabase
+    .from("set_versions")
+    .select("snapshot")
+    .eq("id", versionId)
+    .eq("project_id", projectId)
+    .single();
+
+  if (versionError || !version) {
+    throw new Error("Versão não encontrada.");
+  }
+
+  const snapshot = version.snapshot as VersionSnapshot;
+
+  const { error: deleteItemsError } = await supabase
+    .from("set_tracklist_items")
+    .delete()
+    .eq("project_id", projectId);
+
+  if (deleteItemsError) {
+    throw new Error(deleteItemsError.message);
+  }
+
+  const { error: deleteBlocksError } = await supabase
+    .from("set_blocks")
+    .delete()
+    .eq("project_id", projectId);
+
+  if (deleteBlocksError) {
+    throw new Error(deleteBlocksError.message);
+  }
+
+  const blockIdMap = new Map<string, string>();
+
+  for (const block of snapshot.blocks ?? []) {
+    const { data: newBlock, error: blockError } = await supabase
+      .from("set_blocks")
+      .insert({ project_id: projectId, name: block.name })
+      .select("id")
+      .single();
+
+    if (blockError || !newBlock) {
+      throw new Error(blockError?.message || "Erro ao restaurar bloco.");
+    }
+
+    blockIdMap.set(block.tempId, newBlock.id);
+  }
+
+  const trackIds = [...new Set((snapshot.items ?? []).map((item) => item.track_id))];
+
+  const { data: existingTracks, error: tracksError } = await supabase
+    .from("tracks")
+    .select("id")
+    .eq("user_id", userId)
+    .in("id", trackIds.length > 0 ? trackIds : ["00000000-0000-0000-0000-000000000000"]);
+
+  if (tracksError) {
+    throw new Error(tracksError.message);
+  }
+
+  const existingTrackIdSet = new Set((existingTracks ?? []).map((track) => track.id));
+
+  const rowsToInsert = (snapshot.items ?? [])
+    .filter((item) => existingTrackIdSet.has(item.track_id))
+    .map((item, index) => ({
+      project_id: projectId,
+      track_id: item.track_id,
+      position: index + 1,
+      curatorial_moment: item.curatorial_moment,
+      curatorial_intent: item.curatorial_intent,
+      block_id: item.block_temp_id
+        ? blockIdMap.get(item.block_temp_id) ?? null
+        : null,
+    }));
+
+  if (rowsToInsert.length > 0) {
+    const { error: insertError } = await supabase
+      .from("set_tracklist_items")
+      .insert(rowsToInsert);
+
+    if (insertError) {
+      throw new Error(insertError.message);
+    }
+  }
+
+  revalidatePath(`/app/projetos/${projectId}`);
+
+  return {
+    restoredCount: rowsToInsert.length,
+    skippedCount: (snapshot.items ?? []).length - rowsToInsert.length,
+  };
+}
+
+export async function deleteSetVersion(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
+  const projectId = String(formData.get("project_id") || "");
+  const versionId = String(formData.get("version_id") || "");
+
+  if (!projectId || !versionId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { error } = await supabase
+    .from("set_versions")
+    .delete()
+    .eq("id", versionId)
+    .eq("project_id", projectId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/app/projetos/${projectId}`);
+}
+
+/**
+ * Registra a decisão humana (aprovar/rejeitar, com justificativa opcional)
+ * sobre uma transição específica entre duas tracks da tracklist. Resolve
+ * from/to por track_id -> candidata do projeto, já que approved_transitions
+ * referencia set_candidates, não set_tracklist_items diretamente.
+ */
+export async function recordTransitionDecision(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
+  const projectId = String(formData.get("project_id") || "");
+  const fromTrackId = String(formData.get("from_track_id") || "");
+  const toTrackId = String(formData.get("to_track_id") || "");
+  const decision = String(formData.get("decision") || "");
+  const explanation = String(formData.get("explanation") || "").trim();
+
+  if (!projectId || !fromTrackId || !toTrackId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  if (decision !== "approved" && decision !== "rejected") {
+    throw new Error("Decisão inválida.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { data: candidateRows, error: candidateError } = await supabase
+    .from("set_candidates")
+    .select("id, track_id")
+    .eq("project_id", projectId)
+    .in("track_id", [fromTrackId, toTrackId]);
+
+  if (candidateError) {
+    throw new Error(candidateError.message);
+  }
+
+  const fromCandidate = candidateRows?.find((row) => row.track_id === fromTrackId);
+  const toCandidate = candidateRows?.find((row) => row.track_id === toTrackId);
+
+  if (!fromCandidate || !toCandidate) {
+    throw new Error(
+      "Não foi possível localizar as candidatas dessa transição (a track pode ter sido removida do projeto)."
+    );
+  }
+
+  const { error } = await supabase.from("approved_transitions").upsert(
+    {
+      project_id: projectId,
+      from_candidate_id: fromCandidate.id,
+      to_candidate_id: toCandidate.id,
+      status: decision,
+      explanation: explanation || null,
+    },
+    { onConflict: "project_id,from_candidate_id,to_candidate_id" }
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/app/projetos/${projectId}`);
+}
+
+export async function clearTransitionDecision(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
+  const projectId = String(formData.get("project_id") || "");
+  const fromTrackId = String(formData.get("from_track_id") || "");
+  const toTrackId = String(formData.get("to_track_id") || "");
+
+  if (!projectId || !fromTrackId || !toTrackId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { data: candidateRows, error: candidateError } = await supabase
+    .from("set_candidates")
+    .select("id, track_id")
+    .eq("project_id", projectId)
+    .in("track_id", [fromTrackId, toTrackId]);
+
+  if (candidateError) {
+    throw new Error(candidateError.message);
+  }
+
+  const fromCandidate = candidateRows?.find((row) => row.track_id === fromTrackId);
+  const toCandidate = candidateRows?.find((row) => row.track_id === toTrackId);
+
+  if (!fromCandidate || !toCandidate) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from("approved_transitions")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("from_candidate_id", fromCandidate.id)
+    .eq("to_candidate_id", toCandidate.id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/app/projetos/${projectId}`);
+}
+
+/**
+ * Reordena a tracklist a partir de uma lista completa de IDs de item já na
+ * ordem final desejada (usado pelo drag-and-drop no cliente). Reaproveita
+ * o mesmo truque de posições negativas temporárias que moveEntityUp/Down já
+ * usam, via applyNewOrder.
+ */
+export async function reorderTracklist(
+  projectId: string,
+  orderedItemIds: string[]
+) {
+  const { supabase, userId } = await requireAuth();
+
+  if (!projectId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const newOrderArray = orderedItemIds.map((itemId, index) => ({
+    id: itemId,
+    newPosition: index + 1,
+  }));
+
+  await applyNewOrder(supabase, projectId, newOrderArray);
+
+  revalidatePath(`/app/projetos/${projectId}`);
+}
