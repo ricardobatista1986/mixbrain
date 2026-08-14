@@ -1257,3 +1257,30 @@ export async function reorderTracklist(
 
   revalidatePath(`/app/projetos/${projectId}`);
 }
+
+export async function updateScoringWeights(
+projectId: string,
+weights: Partial<ScoringWeights>
+) {
+const { supabase, userId } = await requireAuth();
+
+if (!projectId) {
+throw new Error("Projeto inválido.");
+}
+
+const parsed = parseWeights(weights);
+
+const { error } = await supabase
+.from("set_projects")
+.update({ scoring_weights: parsed })
+.eq("id", projectId)
+.eq("user_id", userId);
+
+if (error) {
+throw new Error(error.message);
+}
+
+revalidatePath(`/app/projetos/${projectId}`);
+
+return parsed;
+}
