@@ -3,6 +3,27 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Paleta MixBrain dark — inspirada na sensação visual do Claude:
+     grafite quente em vez de preto/azul frio, com acento âmbar/terracota. */
+  --mb-canvas: #1c1a19;
+  --mb-canvas-soft: #211f1d;
+  --mb-surface: #262422;
+  --mb-surface-hover: #2c2a27;
+  --mb-surface-strong: #322f2c;
+  --mb-border: rgba(255, 255, 255, 0.08);
+  --mb-border-strong: rgba(255, 255, 255, 0.16);
+  --mb-text-primary: #f3efe9;
+  --mb-text-secondary: #bdb6ae;
+  --mb-text-muted: #8d8781;
+  --mb-accent: #d97757;
+  --mb-accent-strong: #c8623f;
+  --mb-accent-soft: rgba(217, 119, 87, 0.14);
+  --mb-accent-text: #f2b79b;
+  --mb-danger: #e0655f;
+  --mb-danger-soft: rgba(224, 101, 95, 0.14);
+  --mb-success: #7fb88a;
+  --mb-success-soft: rgba(127, 184, 138, 0.14);
 }
 
 @theme inline {
