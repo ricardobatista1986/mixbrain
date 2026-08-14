@@ -3,6 +3,7 @@ import {
   type CuratorialMoment,
   type ScoreTrack,
   type ScoreTracklistItemContext,
+  type ScoringWeights,
 } from "./transition-score";
 
 export type SequenceMember =
@@ -59,12 +60,20 @@ function pickSeedIndex(units: SequenceUnit[]): number {
  * projeto (harmonia, energia, BPM, mood, diversidade e, quando já houver
  * momento curatorial marcado nos items existentes, narrativa/timing também).
  *
+ * Quando o projeto tiver pesos customizados (`set_projects.scoring_weights`),
+ * eles são passados para `calculateTransitionScore` e usados na escolha —
+ * a heurística de sequenciamento respeita a mesma priorização que o usuário
+ * configurou para a explicação de score na UI.
+ *
  * É uma heurística gulosa, não uma otimização global (não é um solver de
  * TSP) — mas é determinística, rápida (O(n²), tranquilo para dezenas ou
  * poucas centenas de tracks) e usa o mesmo critério que already explica o
  * score na UI, então o resultado é auditável pelo usuário depois.
  */
-export function buildAutoSequence(units: SequenceUnit[]): SequenceUnit[] {
+export function buildAutoSequence(
+  units: SequenceUnit[],
+  weights?: ScoringWeights | null
+): SequenceUnit[] {
   if (units.length <= 1) return [...units];
 
   const remaining = [...units];
@@ -82,7 +91,8 @@ export function buildAutoSequence(units: SequenceUnit[]): SequenceUnit[] {
         last.exitTrack,
         candidate.entryTrack,
         last.exitContext,
-        candidate.entryContext
+        candidate.entryContext,
+        weights
       );
       const value = score?.finalScore ?? 0;
 

@@ -52,11 +52,72 @@ export type TransitionScore = {
   factors: ScoreFactor[];
 };
 
+/**
+ * Pesos ajustáveis por projeto (coluna `set_projects.scoring_weights`).
+ * As chaves correspondem aos mesmos sete fatores do score, mapeados em
+ * `FACTOR_WEIGHT_KEY` abaixo. Os valores padrão somam 100, mas isso não é
+ * uma regra imposta pelo motor de score — é só a convenção usada no valor
+ * default da coluna no banco.
+ */
+export type ScoringWeights = {
+  bpm: number;
+  energy: number;
+  moment: number;
+  harmony: number;
+  texture: number;
+  diversity: number;
+  narrative: number;
+};
+
+const FACTOR_WEIGHT_KEY: Record<ScoreFactor["id"], keyof ScoringWeights> = {
+  bpm: "bpm",
+  energy: "energy",
+  timing: "moment",
+  harmony: "harmony",
+  mood: "texture",
+  diversity: "diversity",
+  narrative: "narrative",
+};
+
+/**
+ * Aplica pesos customizados do projeto por cima dos fatores já calculados,
+ * sem alterar a lógica de cada fator individualmente (harmonia, energia,
+ * etc. continuam calculando o `score` 0-100 da mesma forma). Só troca o
+ * `officialWeight`/`effectiveWeight` usado na média ponderada final.
+ * Fatores com status "missing"/"pending" continuam com effectiveWeight 0,
+ * então nunca entram na média mesmo com peso customizado alto.
+ */
+function applyCustomWeights(
+  factors: ScoreFactor[],
+  weights?: ScoringWeights | null
+): ScoreFactor[] {
+  if (!weights) {
+    return factors;
+  }
+
+  return factors.map((factor) => {
+    const key = FACTOR_WEIGHT_KEY[factor.id];
+    const customWeight = weights[key];
+
+    if (typeof customWeight !== "number" || Number.isNaN(customWeight)) {
+      return factor;
+    }
+
+    return {
+      ...factor,
+      officialWeight: customWeight,
+      effectiveWeight: factor.status === "available" ? customWeight : 0,
+    };
+  });
+}
+
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function parseCamelot(musicalKey: string | null | undefined): CamelotKey | null {
+function parseCamelot(
+  musicalKey: string | null | undefined
+): CamelotKey | null {
   if (!musicalKey) {
     return null;
   }
@@ -220,8 +281,7 @@ function getEnergyFactor(currentTrack: ScoreTrack, nextTrack: ScoreTrack): Score
       effectiveWeight: 0,
       score: null,
       status: "missing",
-      explanation:
-        "Sem energia nas duas tracks. Energia não entrou no cálculo.",
+      explanation: "Sem energia nas duas tracks. Energia não entrou no cálculo.",
     };
   }
 
@@ -535,13 +595,14 @@ export function calculateTransitionScore(
   currentTrack: ScoreTrack | null | undefined,
   nextTrack: ScoreTrack | null | undefined,
   currentContext?: ScoreTracklistItemContext | null,
-  nextContext?: ScoreTracklistItemContext | null
+  nextContext?: ScoreTracklistItemContext | null,
+  weights?: ScoringWeights | null
 ): TransitionScore | null {
   if (!currentTrack || !nextTrack) {
     return null;
   }
 
-  const factors: ScoreFactor[] = [
+  const rawFactors: ScoreFactor[] = [
     getNarrativeFactor(currentContext, nextContext),
     getTimingFactor(currentContext, nextContext),
     getHarmonyFactor(currentTrack, nextTrack),
@@ -550,6 +611,8 @@ export function calculateTransitionScore(
     getBpmFactor(currentTrack, nextTrack),
     getDiversityFactor(currentTrack, nextTrack),
   ];
+
+  const factors = applyCustomWeights(rawFactors, weights);
 
   const availableFactors = factors.filter(
     (factor) => factor.status === "available" && factor.score !== null
