@@ -12,6 +12,40 @@ import type {
   ScoreTracklistItemContext,
 } from "@/lib/mixbrain/transition-score";
 
+import type { ScoringWeights } from "@/lib/mixbrain/transition-score";
+
+const DEFAULT_WEIGHTS: ScoringWeights = {
+bpm: 7,
+energy: 13,
+moment: 22,
+harmony: 16,
+texture: 9,
+diversity: 5,
+narrative: 28,
+};
+
+function parseWeights(input: Partial<ScoringWeights>): ScoringWeights {
+const keys = Object.keys(DEFAULT_WEIGHTS) as (keyof ScoringWeights)[];
+
+const weights = Object.fromEntries(
+keys.map((key) => {
+const value = Number(input[key] ?? DEFAULT_WEIGHTS[key]);
+
+if (!Number.isFinite(value) || value < 0 || value > 100) {
+throw new Error(`Peso inválido para ${key}.`);
+}
+
+return [key, value];
+})
+) as ScoringWeights;
+
+if (Object.values(weights).every((value) => value === 0)) {
+throw new Error("Pelo menos um peso deve ser maior que zero.");
+}
+
+return weights;
+}
+
 type SupabaseLike = Awaited<ReturnType<typeof createClient>>;
 
 type OrderUpdateItem = {
