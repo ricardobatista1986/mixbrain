@@ -56,7 +56,7 @@ export function DeleteProjectButton({
         }}
         className={
           variant === "icon"
-            ? "rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold text-rose-300 transition hover:border-rose-300/50 hover:bg-rose-300/10"
+            ? "rounded-full border border-claude-border px-3 py-1.5 text-xs font-semibold text-rose-300 transition hover:border-rose-300/50 hover:bg-rose-300/10"
             : "rounded-xl border border-rose-400/30 px-4 py-2 text-sm font-bold text-rose-300 transition hover:bg-rose-400/10"
         }
       >
@@ -96,7 +96,7 @@ export function DeleteProjectButton({
             setError("");
           }}
           disabled={isPending}
-          className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:text-white"
+          className="rounded-lg border border-claude-border px-3 py-1.5 text-xs font-medium text-claude-text-muted transition hover:text-white"
         >
           Cancelar
         </button>

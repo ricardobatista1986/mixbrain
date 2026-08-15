@@ -110,7 +110,7 @@ export function TransitionDecisionControls({
             onChange={(e) => setExplanation(e.target.value)}
             placeholder="Justificativa (opcional) — por que aprovar ou rejeitar essa transição"
             rows={2}
-            className="w-full rounded-lg border border-current/20 bg-slate-950/40 px-3 py-2 text-xs text-slate-100 outline-none placeholder:text-slate-500"
+            className="w-full rounded-lg border border-current/20 bg-claude-surface/40 px-3 py-2 text-xs text-claude-text outline-none placeholder:text-claude-text0"
           />
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -133,7 +133,7 @@ export function TransitionDecisionControls({
               <button
                 type="button"
                 onClick={() => setEditing(false)}
-                className="text-xs text-slate-400 hover:text-slate-200"
+                className="text-xs text-claude-text-muted hover:text-claude-text"
               >
                 Cancelar
               </button>

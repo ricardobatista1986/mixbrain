@@ -115,14 +115,14 @@ export function SetVersionsPanel({
   }
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-      <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
+    <section className="rounded-3xl border border-claude-border bg-claude-surface p-6">
+      <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
         Versões
       </p>
       <h2 className="mt-2 text-2xl font-black tracking-tight">
         Salvar e restaurar snapshots
       </h2>
-      <p className="mt-2 text-sm text-slate-400">
+      <p className="mt-2 text-sm text-claude-text-muted">
         Guarda a tracklist atual (ordem, blocos e momentos) com um nome.
         Restaurar substitui a tracklist atual pela salva — as candidatas
         continuam intactas.
@@ -134,14 +134,14 @@ export function SetVersionsPanel({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Nome da versão (ex.: Warm up v1)"
-          className="min-w-[220px] flex-1 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none"
+          className="min-w-[220px] flex-1 rounded-xl border border-claude-border bg-claude-bg px-3 py-2 text-sm text-claude-text outline-none"
         />
         <button
           type="button"
           onClick={handleSave}
           disabled={isPending || tracklistEmpty}
           title={tracklistEmpty ? "A tracklist está vazia" : undefined}
-          className="rounded-xl bg-cyan-300 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-xl bg-claude-accent px-4 py-2 text-sm font-bold text-claude-bg transition hover:bg-claude-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           Salvar versão atual
         </button>
@@ -160,16 +160,16 @@ export function SetVersionsPanel({
 
       <div className="mt-5 space-y-2">
         {versions.length === 0 ? (
-          <p className="text-sm text-slate-500">Nenhuma versão salva ainda.</p>
+          <p className="text-sm text-claude-text0">Nenhuma versão salva ainda.</p>
         ) : (
           versions.map((version) => (
             <div
               key={version.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-950/50 p-3"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-claude-border bg-claude-surface/50 p-3"
             >
               <div>
-                <p className="text-sm font-semibold text-slate-100">{version.name}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm font-semibold text-claude-text">{version.name}</p>
+                <p className="text-xs text-claude-text0">
                   {formatDate(version.createdAt)} · {version.trackCount} track(s)
                 </p>
               </div>
@@ -180,14 +180,14 @@ export function SetVersionsPanel({
                     type="button"
                     onClick={() => handleRestore(version.id)}
                     disabled={isPending}
-                    className="rounded-lg bg-cyan-300 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-cyan-200 disabled:opacity-60"
+                    className="rounded-lg bg-claude-accent px-3 py-1.5 text-xs font-bold text-claude-bg hover:bg-claude-accent-hover disabled:opacity-60"
                   >
                     {isPending ? "Restaurando..." : "Confirmar restauração"}
                   </button>
                   <button
                     type="button"
                     onClick={() => setRestoringId(null)}
-                    className="text-xs text-slate-400 hover:text-slate-200"
+                    className="text-xs text-claude-text-muted hover:text-claude-text"
                   >
                     Cancelar
                   </button>
@@ -197,7 +197,7 @@ export function SetVersionsPanel({
                   <button
                     type="button"
                     onClick={() => setRestoringId(version.id)}
-                    className="text-xs font-bold text-cyan-300 hover:text-cyan-200"
+                    className="text-xs font-bold text-claude-accent hover:text-claude-accent-hover"
                   >
                     Restaurar
                   </button>

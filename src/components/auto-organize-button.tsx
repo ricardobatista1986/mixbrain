@@ -53,7 +53,7 @@ export function AutoOrganizeButton({ projectId }: { projectId: string }) {
             setError("");
             setConfirming(true);
           }}
-          className="rounded-lg bg-indigo-400 px-4 py-2 text-xs font-bold text-slate-950 transition hover:bg-indigo-300"
+          className="rounded-lg bg-indigo-400 px-4 py-2 text-xs font-bold text-claude-bg transition hover:bg-indigo-300"
         >
           Gerar ordem automática
         </button>
@@ -63,7 +63,7 @@ export function AutoOrganizeButton({ projectId }: { projectId: string }) {
             type="button"
             onClick={handleRun}
             disabled={isPending}
-            className="rounded-lg bg-indigo-300 px-4 py-2 text-xs font-bold text-slate-950 transition hover:bg-indigo-200 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg bg-indigo-300 px-4 py-2 text-xs font-bold text-claude-bg transition hover:bg-indigo-200 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isPending ? "Organizando..." : "Confirmar e organizar"}
           </button>
@@ -71,7 +71,7 @@ export function AutoOrganizeButton({ projectId }: { projectId: string }) {
             type="button"
             onClick={() => setConfirming(false)}
             disabled={isPending}
-            className="text-xs text-slate-400 hover:text-slate-200"
+            className="text-xs text-claude-text-muted hover:text-claude-text"
           >
             Cancelar
           </button>

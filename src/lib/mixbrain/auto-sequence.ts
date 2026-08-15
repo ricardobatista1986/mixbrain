@@ -60,11 +60,6 @@ function pickSeedIndex(units: SequenceUnit[]): number {
  * projeto (harmonia, energia, BPM, mood, diversidade e, quando já houver
  * momento curatorial marcado nos items existentes, narrativa/timing também).
  *
- * Quando o projeto tiver pesos customizados (`set_projects.scoring_weights`),
- * eles são passados para `calculateTransitionScore` e usados na escolha —
- * a heurística de sequenciamento respeita a mesma priorização que o usuário
- * configurou para a explicação de score na UI.
- *
  * É uma heurística gulosa, não uma otimização global (não é um solver de
  * TSP) — mas é determinística, rápida (O(n²), tranquilo para dezenas ou
  * poucas centenas de tracks) e usa o mesmo critério que already explica o
@@ -72,7 +67,7 @@ function pickSeedIndex(units: SequenceUnit[]): number {
  */
 export function buildAutoSequence(
   units: SequenceUnit[],
-  weights?: ScoringWeights | null
+  weights?: ScoringWeights
 ): SequenceUnit[] {
   if (units.length <= 1) return [...units];
 

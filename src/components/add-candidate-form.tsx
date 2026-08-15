@@ -90,19 +90,19 @@ export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFor
 
   if (availableTracks.length === 0) {
     return (
-      <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-300">
+      <section className="rounded-3xl border border-claude-border bg-claude-surface/70 p-6">
+        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-claude-accent">
           Adicionar candidata
         </p>
-        <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-50">
+        <h2 className="mt-3 text-2xl font-black tracking-tight text-claude-text">
           Sem tracks disponíveis
         </h2>
-        <p className="mt-3 text-sm leading-7 text-slate-400">
+        <p className="mt-3 text-sm leading-7 text-claude-text-muted">
           Todas as tracks da sua biblioteca já foram adicionadas a este projeto,
           ou você ainda não cadastrou nenhuma track. Acesse a{" "}
           <a
             href="/app/tracks"
-            className="text-cyan-300 underline-offset-2 hover:underline"
+            className="text-claude-accent underline-offset-2 hover:underline"
           >
             biblioteca
           </a>{" "}
@@ -113,16 +113,16 @@ export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFor
   }
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-cyan-950/20">
+    <section className="rounded-3xl border border-claude-border bg-claude-surface/70 p-6 shadow-2xl shadow-claude-bg/20">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-2xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-300">
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-claude-accent">
             Adicionar candidata
           </p>
-          <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-50">
+          <h2 className="mt-3 text-2xl font-black tracking-tight text-claude-text">
             Buscar na biblioteca
           </h2>
-          <p className="mt-3 text-sm leading-7 text-slate-400">
+          <p className="mt-3 text-sm leading-7 text-claude-text-muted">
             Busque por artista, título, key ou BPM. Marque quantas quiser e
             adicione todas de uma vez.
           </p>
@@ -133,7 +133,7 @@ export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFor
             type="button"
             onClick={handleAddSelected}
             disabled={isPending}
-            className="rounded-xl bg-cyan-300 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-xl bg-claude-accent px-4 py-2 text-sm font-bold text-claude-bg transition hover:bg-claude-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isPending ? "Adicionando..." : `Adicionar ${selected.size} selecionada(s)`}
           </button>
@@ -146,13 +146,13 @@ export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFor
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Buscar por artista, título, key, BPM..."
-          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-cyan-300"
+          className="rounded-xl border border-claude-border bg-claude-bg px-3 py-2.5 text-sm text-claude-text outline-none transition focus:border-claude-accent"
           autoComplete="off"
         />
         <select
           value={keyFilter}
           onChange={(e) => setKeyFilter(e.target.value)}
-          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none"
+          className="rounded-xl border border-claude-border bg-claude-bg px-3 py-2.5 text-sm text-claude-text outline-none"
         >
           <option value="">Todas as keys</option>
           {availableKeys.map((key) => (
@@ -166,19 +166,19 @@ export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFor
           value={bpmMin}
           onChange={(e) => setBpmMin(e.target.value)}
           placeholder="BPM min"
-          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none"
+          className="rounded-xl border border-claude-border bg-claude-bg px-3 py-2.5 text-sm text-claude-text outline-none"
         />
         <input
           type="number"
           value={bpmMax}
           onChange={(e) => setBpmMax(e.target.value)}
           placeholder="BPM max"
-          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none"
+          className="rounded-xl border border-claude-border bg-claude-bg px-3 py-2.5 text-sm text-claude-text outline-none"
         />
       </div>
 
       {(query || keyFilter || bpmMin || bpmMax) && (
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-claude-text0">
           {filtered.length} de {availableTracks.length} tracks correspondem ao filtro.
         </p>
       )}
@@ -200,7 +200,7 @@ export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFor
 
       <div className="mt-5 max-h-[420px] space-y-1.5 overflow-y-auto pr-1">
         {filtered.length === 0 ? (
-          <p className="py-6 text-center text-sm text-slate-500">
+          <p className="py-6 text-center text-sm text-claude-text0">
             Nenhuma track encontrada com esse filtro.
           </p>
         ) : (
@@ -211,8 +211,8 @@ export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFor
                 key={track.id}
                 className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2 transition ${
                   isSelected
-                    ? "border-cyan-300/50 bg-cyan-300/10"
-                    : "border-white/5 bg-slate-950/40 hover:border-white/15"
+                    ? "border-claude-accent/50 bg-claude-accent/10"
+                    : "border-claude-border/60 bg-claude-surface/40 hover:border-claude-border"
                 }`}
               >
                 <div className="flex min-w-0 items-center gap-3">
@@ -220,16 +220,16 @@ export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFor
                     type="checkbox"
                     checked={isSelected}
                     onChange={() => toggle(track.id)}
-                    className="h-4 w-4 shrink-0 rounded border-white/20 bg-slate-900"
+                    className="h-4 w-4 shrink-0 rounded border-claude-border bg-claude-surface"
                   />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-100">
-                      {track.artist} <span className="text-slate-500">—</span>{" "}
+                    <p className="truncate text-sm font-semibold text-claude-text">
+                      {track.artist} <span className="text-claude-text0">—</span>{" "}
                       {track.title}
                     </p>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2 text-[11px] text-slate-400">
+                <div className="flex shrink-0 items-center gap-2 text-[11px] text-claude-text-muted">
                   {track.bpm ? <span>{track.bpm} BPM</span> : null}
                   {track.musical_key ? <span>{track.musical_key}</span> : null}
                   {track.energy ? <span>E{track.energy}</span> : null}
@@ -239,7 +239,7 @@ export function AddCandidateForm({ projectId, availableTracks }: AddCandidateFor
           })
         )}
         {filtered.length > 200 ? (
-          <p className="pt-2 text-center text-xs text-slate-500">
+          <p className="pt-2 text-center text-xs text-claude-text0">
             Mostrando as primeiras 200 de {filtered.length} — refine a busca para ver outras.
           </p>
         ) : null}

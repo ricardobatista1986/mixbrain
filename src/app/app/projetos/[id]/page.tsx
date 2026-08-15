@@ -14,6 +14,10 @@ import {
   TransitionDecisionControls,
   type TransitionDecision,
 } from "@/components/transition-decision-controls";
+import { CurationTimeline, type CurationEventSummary } from "@/components/curation-timeline";
+import { ScoringWeightsPanel } from "@/components/scoring-weights-panel";
+import { BridgeSuggestions, type BridgeSuggestionTrack } from "@/components/bridge-suggestions";
+import { EnergyArcChart, type EnergyPoint } from "@/components/energy-arc-chart";
 import { createClient } from "@/lib/supabase/server";
 import {
   approveCandidateToTracklist,
@@ -26,9 +30,11 @@ import {
 } from "./actions";
 import {
   calculateTransitionScore,
+  normalizeScoringWeights,
   type CuratorialMoment,
   type ScoreTrack,
   type ScoreTracklistItemContext,
+  type ScoringWeights,
   type TransitionScore,
 } from "@/lib/mixbrain/transition-score";
 
@@ -84,13 +90,51 @@ function getTrackFromRelation(
   return relation ?? null;
 }
 
+/**
+ * Sugestões de bridge para uma transição fraca: procura, num recorte da
+ * biblioteca ainda não usada no projeto, tracks que fariam uma ponte
+ * melhor — boa saída da track A e boa entrada na track B. Só vale a pena
+ * chamar para transições já identificadas como fracas/atenção; caso
+ * contrário não haveria motivo para sugerir uma ponte.
+ */
+function computeBridgeSuggestions(
+  trackA: ScoreTrack,
+  trackB: ScoreTrack,
+  pool: ScoreTrack[],
+  weights: ScoringWeights | undefined,
+  excludeIds: Set<string>
+): BridgeSuggestionTrack[] {
+  return pool
+    .filter((candidate) => !excludeIds.has(candidate.id))
+    .map((candidate) => {
+      const scoreIn = calculateTransitionScore(trackA, candidate, null, null, weights)?.finalScore;
+      const scoreOut = calculateTransitionScore(candidate, trackB, null, null, weights)?.finalScore;
+
+      if (scoreIn === undefined || scoreOut === undefined || scoreIn === null || scoreOut === null) {
+        return null;
+      }
+
+      return {
+        id: candidate.id,
+        title: candidate.title,
+        artist: candidate.artist || "Artista não informado",
+        bpm: candidate.bpm,
+        musical_key: candidate.musical_key,
+        score: Math.round((scoreIn + scoreOut) / 2),
+      };
+    })
+    .filter((entry): entry is BridgeSuggestionTrack => entry !== null && entry.score >= 60)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+
 function getScoreToneClasses(score: TransitionScore) {
   const tones = {
     emerald: "border-emerald-300/30 bg-emerald-300/10 text-emerald-100",
-    cyan: "border-cyan-300/30 bg-cyan-300/10 text-cyan-100",
+    cyan: "border-claude-accent/30 bg-claude-accent/10 text-claude-accent-hover",
     amber: "border-amber-300/30 bg-amber-300/10 text-amber-100",
     rose: "border-rose-300/30 bg-rose-300/10 text-rose-100",
-    slate: "border-white/10 bg-white/[0.03] text-slate-200",
+    slate: "border-claude-border bg-claude-surface text-claude-text",
   };
   return tones[score.tone];
 }
@@ -148,15 +192,15 @@ function MixBrainLegend() {
                 <span className="mt-0.5 rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2 py-0.5 text-[10px] font-bold text-emerald-100">
                   EXCELENTE
                 </span>
-                <span className="text-slate-300">
+                <span className="text-claude-text-muted">
                   85% a 100%. Transição perfeita e sem atrito.
                 </span>
               </li>
               <li className="flex items-start gap-3">
-                <span className="mt-0.5 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-bold text-cyan-100">
+                <span className="mt-0.5 rounded-full border border-claude-accent/30 bg-claude-accent/10 px-2 py-0.5 text-[10px] font-bold text-claude-accent-hover">
                   BOA
                 </span>
-                <span className="text-slate-300">
+                <span className="text-claude-text-muted">
                   70% a 84%. Mixável e funcional narrativamente.
                 </span>
               </li>
@@ -164,7 +208,7 @@ function MixBrainLegend() {
                 <span className="mt-0.5 rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-[10px] font-bold text-amber-100">
                   ATENÇÃO
                 </span>
-                <span className="text-slate-300">
+                <span className="text-claude-text-muted">
                   55% a 69%. Exige técnica, ponte ou pausa de respiro.
                 </span>
               </li>
@@ -172,7 +216,7 @@ function MixBrainLegend() {
                 <span className="mt-0.5 rounded-full border border-rose-300/30 bg-rose-300/10 px-2 py-0.5 text-[10px] font-bold text-rose-100">
                   FRACA
                 </span>
-                <span className="text-slate-300">
+                <span className="text-claude-text-muted">
                   Abaixo de 55%. Alto risco de choque de energia ou harmonia.
                 </span>
               </li>
@@ -184,24 +228,24 @@ function MixBrainLegend() {
             <h4 className="mb-4 text-xs font-bold uppercase tracking-widest text-indigo-300">
               Momentos Curatoriais
             </h4>
-            <ul className="space-y-2 text-sm text-slate-300">
+            <ul className="space-y-2 text-sm text-claude-text-muted">
               <li>
-                <strong className="text-slate-100">Abertura:</strong> Introdução do set, clima inicial.
+                <strong className="text-claude-text">Abertura:</strong> Introdução do set, clima inicial.
               </li>
               <li>
-                <strong className="text-slate-100">Construção:</strong> Elevando a energia, preparando o terreno.
+                <strong className="text-claude-text">Construção:</strong> Elevando a energia, preparando o terreno.
               </li>
               <li>
-                <strong className="text-slate-100">Vale:</strong> Respiro, quebra de expectativa ou tensão pré-pico.
+                <strong className="text-claude-text">Vale:</strong> Respiro, quebra de expectativa ou tensão pré-pico.
               </li>
               <li>
-                <strong className="text-slate-100">Pico:</strong> Clímax, catarse, maior entrega de energia.
+                <strong className="text-claude-text">Pico:</strong> Clímax, catarse, maior entrega de energia.
               </li>
               <li>
-                <strong className="text-slate-100">Contemplação:</strong> Densidade emocional, viagem sonora reflexiva.
+                <strong className="text-claude-text">Contemplação:</strong> Densidade emocional, viagem sonora reflexiva.
               </li>
               <li>
-                <strong className="text-slate-100">Encerramento:</strong> Desfecho e conclusão da narrativa.
+                <strong className="text-claude-text">Encerramento:</strong> Desfecho e conclusão da narrativa.
               </li>
             </ul>
           </div>
@@ -211,27 +255,27 @@ function MixBrainLegend() {
             <h4 className="mb-4 text-xs font-bold uppercase tracking-widest text-indigo-300">
               Os 7 Fatores (Pesos)
             </h4>
-            <ul className="space-y-1.5 text-sm text-slate-300">
+            <ul className="space-y-1.5 text-sm text-claude-text-muted">
               <li>
-                <strong className="text-slate-100">Narrativa (28%):</strong> Coerência da jornada.
+                <strong className="text-claude-text">Narrativa (28%):</strong> Coerência da jornada.
               </li>
               <li>
-                <strong className="text-slate-100">Timing/Momento (22%):</strong> Relação da track com a fase do set.
+                <strong className="text-claude-text">Timing/Momento (22%):</strong> Relação da track com a fase do set.
               </li>
               <li>
-                <strong className="text-slate-100">Harmonia (16%):</strong> Transições no círculo de Camelot.
+                <strong className="text-claude-text">Harmonia (16%):</strong> Transições no círculo de Camelot.
               </li>
               <li>
-                <strong className="text-slate-100">Energia (13%):</strong> Controle de choques ou continuidades.
+                <strong className="text-claude-text">Energia (13%):</strong> Controle de choques ou continuidades.
               </li>
               <li>
-                <strong className="text-slate-100">Mood (9%):</strong> Texturas compartilhadas.
+                <strong className="text-claude-text">Mood (9%):</strong> Texturas compartilhadas.
               </li>
               <li>
-                <strong className="text-slate-100">BPM (7%):</strong> Diferença percentual de tempo.
+                <strong className="text-claude-text">BPM (7%):</strong> Diferença percentual de tempo.
               </li>
               <li>
-                <strong className="text-slate-100">Diversidade (5%):</strong> Variação inteligente de artistas.
+                <strong className="text-claude-text">Diversidade (5%):</strong> Variação inteligente de artistas.
               </li>
             </ul>
           </div>
@@ -247,12 +291,14 @@ function TransitionScoreCard({
   fromTrackId,
   toTrackId,
   decision,
+  bridgeSuggestions,
 }: {
   score: TransitionScore | null;
   projectId?: string;
   fromTrackId?: string;
   toTrackId?: string;
   decision?: TransitionDecision | null;
+  bridgeSuggestions?: BridgeSuggestionTrack[];
 }) {
   if (!score) return null;
 
@@ -301,7 +347,7 @@ function TransitionScoreCard({
           {score.factors.map((factor) => (
             <div
               key={factor.id}
-              className="rounded-lg border border-current/15 bg-slate-950/20 p-3"
+              className="rounded-lg border border-current/15 bg-claude-surface/20 p-3"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -336,6 +382,10 @@ function TransitionScoreCard({
             decision={decision ?? null}
           />
         ) : null}
+
+        {projectId && bridgeSuggestions && bridgeSuggestions.length > 0 ? (
+          <BridgeSuggestions projectId={projectId} suggestions={bridgeSuggestions} />
+        ) : null}
       </div>
     </details>
   );
@@ -351,20 +401,20 @@ function CuratorialEditor({
   return (
     <form
       action={updateCuratorialFields}
-      className="mt-3 rounded-xl border border-white/10 bg-slate-950/40 p-3"
+      className="mt-3 rounded-xl border border-claude-border bg-claude-surface/40 p-3"
     >
       <input type="hidden" name="project_id" value={projectId} />
       <input type="hidden" name="tracklist_item_id" value={item.id} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="min-w-0 flex-1">
-          <label className="mb-1 block text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+          <label className="mb-1 block text-[11px] font-bold uppercase tracking-[0.18em] text-claude-text-muted">
             Momento no set
           </label>
           <select
             name="curatorial_moment"
             defaultValue={item.curatorial_moment ?? ""}
-            className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none"
+            className="w-full rounded-xl border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none"
           >
             <option value="">Sem definição</option>
             <option value="opening">Abertura</option>
@@ -379,15 +429,15 @@ function CuratorialEditor({
         <div className="shrink-0">
           <button
             type="submit"
-            className="w-full rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700 sm:w-auto"
+            className="w-full rounded-xl bg-claude-surface-3 px-4 py-2 text-sm font-bold text-white transition hover:bg-claude-surface-3 sm:w-auto"
           >
             Salvar momento
           </button>
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
-        <span className="rounded-full border border-white/10 px-3 py-1">
+      <div className="mt-3 flex flex-wrap gap-2 text-xs text-claude-text-muted">
+        <span className="rounded-full border border-claude-border px-3 py-1">
           Momento atual: {getMomentLabel(item.curatorial_moment)}
         </span>
       </div>
@@ -510,11 +560,31 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
     return transitionDecisionByTrackPair.get(`${fromTrackId}:${toTrackId}`) ?? null;
   }
 
+  const scoringWeights: ScoringWeights | undefined = normalizeScoringWeights(
+    project.scoring_weights
+  );
+
+  const { data: rawCurationEvents } = await supabase
+    .from("curation_events")
+    .select("id, event_type, payload, created_at")
+    .eq("project_id", id)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  const curationEvents: CurationEventSummary[] = (rawCurationEvents ?? []).map((event) => ({
+    id: event.id,
+    eventType: event.event_type,
+    payload: (event.payload as Record<string, unknown> | null) ?? null,
+    createdAt: event.created_at,
+  }));
+
   const pendingCandidates =
     candidates?.filter((candidate) => !tracklistTrackIds.has(candidate.track_id)) ?? [];
 
   const availableTracks =
     allTracks?.filter((track) => !candidateTrackIds.has(track.id)) ?? [];
+
+  const bridgePool = availableTracks.slice(0, 150) as ScoreTrack[];
 
   // --- Classificação de fora do padrão (BPM destoante) ---------------
   // Critério primário: faixa de BPM definida no próprio projeto (bpm_min/
@@ -600,7 +670,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
     if (poolForSuggestions.length === 0) return null;
 
     const scores = poolForSuggestions
-      .map((poolTrack) => calculateTransitionScore(poolTrack, track)?.finalScore)
+      .map((poolTrack) => calculateTransitionScore(poolTrack, track, null, null, scoringWeights)?.finalScore)
       .filter((score): score is number => typeof score === "number");
 
     if (scores.length === 0) return null;
@@ -708,6 +778,22 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
     return [row];
   });
 
+  const energyPoints: EnergyPoint[] = groupedItems.flatMap((group) => {
+    const items = group.isBlock ? group.items : [group.item];
+    return items
+      .map((item): EnergyPoint | null => {
+        const track = getTrackFromRelation(item.tracks);
+        if (!track) return null;
+        return {
+          position: item.position,
+          title: track.title,
+          energy: track.energy,
+          moment: item.curatorial_moment,
+        };
+      })
+      .filter((point): point is EnergyPoint => point !== null);
+  });
+
   const { data: rawVersions } = await supabase
     .from("set_versions")
     .select("id, name, created_at, snapshot")
@@ -725,32 +811,32 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
   });
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-white/10 bg-slate-950/90 backdrop-blur">
+    <main className="min-h-screen bg-claude-bg text-claude-text">
+      <header className="border-b border-claude-border bg-claude-bg/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 sm:px-10 lg:px-12">
           <Link
             href="/app"
             className="flex items-center gap-3 transition hover:opacity-80"
           >
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-300 font-black text-slate-950">
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-claude-accent font-black text-claude-bg">
               M
             </div>
             <div>
               <p className="font-bold tracking-tight">MixBrain</p>
-              <p className="text-xs text-slate-400">Projeto de set</p>
+              <p className="text-xs text-claude-text-muted">Projeto de set</p>
             </div>
           </Link>
 
           <div className="flex items-center gap-3">
             <Link
               href="/app"
-              className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
+              className="rounded-full border border-claude-border px-4 py-2 text-sm font-medium text-claude-text-muted transition hover:border-claude-accent/50 hover:text-claude-accent-hover"
             >
               Workspace
             </Link>
             <Link
               href="/app/glossario"
-              className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
+              className="rounded-full border border-claude-border px-4 py-2 text-sm font-medium text-claude-text-muted transition hover:border-claude-accent/50 hover:text-claude-accent-hover"
             >
               Glossário
             </Link>
@@ -759,9 +845,9 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
         </div>
       </header>
 
-      <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,_rgba(34,211,238,0.14),_transparent_40%)]">
+      <section className="border-b border-claude-border bg-[radial-gradient(circle_at_top_right,_rgba(34,211,238,0.14),_transparent_40%)]">
         <div className="mx-auto max-w-7xl px-6 py-14 sm:px-10 lg:px-12">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
             Projeto
           </p>
           <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-5xl">
@@ -769,23 +855,23 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
           </h1>
 
           {project.description ? (
-            <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-300">
+            <p className="mt-5 max-w-3xl text-lg leading-8 text-claude-text-muted">
               {project.description}
             </p>
           ) : (
-            <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-400">
+            <p className="mt-5 max-w-3xl text-lg leading-8 text-claude-text-muted">
               Este projeto ainda não tem descrição.
             </p>
           )}
 
-          <details className="group mt-8 max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
-            <summary className="cursor-pointer list-none px-5 py-3 text-sm font-bold text-slate-300 transition hover:text-cyan-200">
+          <details className="group mt-8 max-w-3xl overflow-hidden rounded-2xl border border-claude-border bg-claude-surface">
+            <summary className="cursor-pointer list-none px-5 py-3 text-sm font-bold text-claude-text-muted transition hover:text-claude-accent-hover">
               <span className="mr-2 inline-block transition-transform group-open:rotate-90">
                 ▶
               </span>
               Editar projeto (nome, descrição, BPM alvo e direção narrativa)
             </summary>
-            <div className="border-t border-white/10 p-5">
+            <div className="border-t border-claude-border p-5">
               <EditProjectForm
                 project={{
                   id: project.id,
@@ -798,7 +884,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 }}
               />
 
-              <div className="mt-6 border-t border-white/10 pt-6">
+              <div className="mt-6 border-t border-claude-border pt-6">
                 <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-rose-300/80">
                   Zona de risco
                 </p>
@@ -818,10 +904,10 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
         <MixBrainLegend />
 
         <div className="grid gap-8 lg:grid-cols-2">
-          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+          <section className="rounded-3xl border border-claude-border bg-claude-surface p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
                   Candidatas
                 </p>
                 <h2 className="mt-2 text-2xl font-black tracking-tight">
@@ -829,7 +915,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 </h2>
               </div>
               <div className="flex items-center gap-2">
-                <span className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-300">
+                <span className="rounded-full border border-claude-border px-3 py-1 text-sm text-claude-text-muted">
                   {fittingCandidates.length}
                 </span>
                 {outlierCandidatesForBox.length > 0 ? (
@@ -855,7 +941,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
             <div className="mt-6 space-y-4">
               {fittingCandidates.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-slate-400">
+                <div className="rounded-2xl border border-dashed border-claude-border p-6 text-center text-claude-text-muted">
                   Sem candidatas na fila de aprovação.
                 </div>
               ) : (
@@ -869,12 +955,12 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                   return (
                     <article
                       key={candidate.id}
-                      className="rounded-2xl border border-white/10 bg-slate-900/50 p-5"
+                      className="rounded-2xl border border-claude-border bg-claude-surface/50 p-5"
                     >
                       <div className="flex justify-between gap-4">
                         <div>
                           <h3 className="text-lg font-bold">{track.title}</h3>
-                          <p className="text-sm text-slate-400">
+                          <p className="text-sm text-claude-text-muted">
                             {track.artist || "Artista não informado"}
                           </p>
                         </div>
@@ -885,21 +971,21 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
                           <button
                             type="submit"
-                            className="rounded-full bg-cyan-300 px-4 py-2 text-sm font-bold text-slate-950 hover:opacity-90"
+                            className="rounded-full bg-claude-accent px-4 py-2 text-sm font-bold text-claude-bg hover:opacity-90"
                           >
                             Aprovar
                           </button>
                         </form>
                       </div>
 
-                      <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
-                        <span className="rounded-full border border-white/10 px-3 py-1">
+                      <div className="mt-4 flex flex-wrap gap-2 text-xs text-claude-text-muted">
+                        <span className="rounded-full border border-claude-border px-3 py-1">
                           BPM: {track.bpm ?? "—"}
                         </span>
-                        <span className="rounded-full border border-white/10 px-3 py-1">
+                        <span className="rounded-full border border-claude-border px-3 py-1">
                           Key: {track.musical_key ?? "—"}
                         </span>
-                        <span className="rounded-full border border-white/10 px-3 py-1">
+                        <span className="rounded-full border border-claude-border px-3 py-1">
                           Energia: {track.energy ?? "—"}
                         </span>
                         {track.mood ? (
@@ -922,10 +1008,10 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             </div>
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+          <section className="rounded-3xl border border-claude-border bg-claude-surface p-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
                   Tracklist
                 </p>
                 <h2 className="mt-2 text-2xl font-black tracking-tight">
@@ -955,7 +1041,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               <input type="hidden" name="project_id" value={id} />
             </form>
 
-            <div className="mt-6 flex items-center justify-between rounded-xl border border-white/10 bg-slate-900/50 p-4">
+            <div className="mt-6 flex items-center justify-between rounded-xl border border-claude-border bg-claude-surface/50 p-4">
               <input
                 form="create-block-form"
                 type="text"
@@ -976,7 +1062,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
             <div className="mt-6 space-y-4">
               {groupedItems.length === 0 ? (
-                <div className="p-6 text-slate-400">Nenhuma track aprovada.</div>
+                <div className="p-6 text-claude-text-muted">Nenhuma track aprovada.</div>
               ) : (
                 groupedItems.map((group, index) => {
                   const isFirst = index === 0;
@@ -1006,7 +1092,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                               <button
                                 type="submit"
                                 disabled={isFirst}
-                                className="p-1 text-slate-400 hover:text-white disabled:opacity-30"
+                                className="p-1 text-claude-text-muted hover:text-white disabled:opacity-30"
                               >
                                 ⬆️
                               </button>
@@ -1019,7 +1105,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                               <button
                                 type="submit"
                                 disabled={isLast}
-                                className="p-1 text-slate-400 hover:text-white disabled:opacity-30"
+                                className="p-1 text-claude-text-muted hover:text-white disabled:opacity-30"
                               >
                                 ⬇️
                               </button>
@@ -1052,37 +1138,38 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                               track,
                               nextTrack,
                               getContextFromItem(item),
-                              getContextFromItem(nextItem)
+                              getContextFromItem(nextItem),
+                              scoringWeights
                             );
 
                             return (
                               <div key={item.id} className="space-y-2">
-                                <article className="rounded-xl border border-white/5 bg-slate-900/50 p-4">
+                                <article className="rounded-xl border border-claude-border/60 bg-claude-surface/50 p-4">
                                   <div className="flex min-w-0 flex-col gap-4">
                                     <div className="flex min-w-0 items-start gap-4">
-                                      <div className="w-6 shrink-0 text-sm font-bold text-slate-500">
+                                      <div className="w-6 shrink-0 text-sm font-bold text-claude-text0">
                                         {item.position}
                                       </div>
 
                                       <div className="min-w-0 flex-1">
-                                        <p className="break-words font-bold text-slate-200">
+                                        <p className="break-words font-bold text-claude-text">
                                           {track.title}
                                         </p>
-                                        <p className="break-words text-xs text-slate-400">
+                                        <p className="break-words text-xs text-claude-text-muted">
                                           {track.artist || "Artista não informado"}
                                         </p>
 
-                                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
-                                          <span className="rounded-full border border-white/10 px-3 py-1">
+                                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-claude-text-muted">
+                                          <span className="rounded-full border border-claude-border px-3 py-1">
                                             BPM: {track.bpm ?? "—"}
                                           </span>
-                                          <span className="rounded-full border border-white/10 px-3 py-1">
+                                          <span className="rounded-full border border-claude-border px-3 py-1">
                                             Key: {track.musical_key ?? "—"}
                                           </span>
-                                          <span className="rounded-full border border-white/10 px-3 py-1">
+                                          <span className="rounded-full border border-claude-border px-3 py-1">
                                             Energia: {track.energy ?? "—"}
                                           </span>
-                                          <span className="rounded-full border border-white/10 px-3 py-1">
+                                          <span className="rounded-full border border-claude-border px-3 py-1">
                                             Mood: {track.mood ?? "—"}
                                           </span>
                                         </div>
@@ -1099,6 +1186,20 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                   fromTrackId={track.id}
                                   toTrackId={nextTrack?.id}
                                   decision={getTransitionDecision(track.id, nextTrack?.id)}
+                                  bridgeSuggestions={
+                                    nextTrack &&
+                                    transitionScore &&
+                                    (transitionScore.label === "Fraca" ||
+                                      transitionScore.label === "Atenção")
+                                      ? computeBridgeSuggestions(
+                                          track,
+                                          nextTrack,
+                                          bridgePool,
+                                          scoringWeights,
+                                          new Set()
+                                        )
+                                      : undefined
+                                  }
                                 />
                               </div>
                             );
@@ -1127,12 +1228,13 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                     track,
                     nextTrack,
                     getContextFromItem(group.item),
-                    nextContext
+                    nextContext,
+                    scoringWeights
                   );
 
                   return (
                     <div key={group.item.id} className="space-y-2">
-                      <article className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.03] p-4">
+                      <article className="rounded-2xl border border-claude-accent/20 bg-claude-accent/[0.03] p-4">
                         <div className="flex min-w-0 flex-col gap-4">
                           <div className="flex min-w-0 items-start gap-4">
                             <div className="mt-1 shrink-0">
@@ -1141,11 +1243,11 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                 type="checkbox"
                                 name="selected_items"
                                 value={group.item.id}
-                                className="h-5 w-5 rounded border-white/20 bg-slate-900"
+                                className="h-5 w-5 rounded border-claude-border bg-claude-surface"
                               />
                             </div>
 
-                            <div className="w-6 shrink-0 pt-0.5 text-sm font-bold text-cyan-500">
+                            <div className="w-6 shrink-0 pt-0.5 text-sm font-bold text-claude-accent">
                               {group.item.position}
                             </div>
 
@@ -1153,21 +1255,21 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                               <h3 className="break-words font-bold">
                                 {track.title}
                               </h3>
-                              <p className="break-words text-xs text-slate-400">
+                              <p className="break-words text-xs text-claude-text-muted">
                                 {track.artist || "Artista não informado"}
                               </p>
 
-                              <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
-                                <span className="rounded-full border border-white/10 px-3 py-1">
+                              <div className="mt-3 flex flex-wrap gap-2 text-xs text-claude-text-muted">
+                                <span className="rounded-full border border-claude-border px-3 py-1">
                                   BPM: {track.bpm ?? "—"}
                                 </span>
-                                <span className="rounded-full border border-white/10 px-3 py-1">
+                                <span className="rounded-full border border-claude-border px-3 py-1">
                                   Key: {track.musical_key ?? "—"}
                                 </span>
-                                <span className="rounded-full border border-white/10 px-3 py-1">
+                                <span className="rounded-full border border-claude-border px-3 py-1">
                                   Energia: {track.energy ?? "—"}
                                 </span>
-                                <span className="rounded-full border border-white/10 px-3 py-1">
+                                <span className="rounded-full border border-claude-border px-3 py-1">
                                   Mood: {track.mood ?? "—"}
                                 </span>
                               </div>
@@ -1182,7 +1284,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                   <button
                                     type="submit"
                                     disabled={isFirst}
-                                    className="rounded-lg border border-white/10 px-2 py-1 text-slate-400 transition hover:text-white disabled:opacity-30"
+                                    className="rounded-lg border border-claude-border px-2 py-1 text-claude-text-muted transition hover:text-white disabled:opacity-30"
                                   >
                                     ⬆️
                                   </button>
@@ -1195,7 +1297,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                   <button
                                     type="submit"
                                     disabled={isLast}
-                                    className="rounded-lg border border-white/10 px-2 py-1 text-slate-400 transition hover:text-white disabled:opacity-30"
+                                    className="rounded-lg border border-claude-border px-2 py-1 text-claude-text-muted transition hover:text-white disabled:opacity-30"
                                   >
                                     ⬇️
                                   </button>
@@ -1224,6 +1326,20 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                         fromTrackId={track.id}
                         toTrackId={nextTrack?.id}
                         decision={getTransitionDecision(track.id, nextTrack?.id)}
+                        bridgeSuggestions={
+                          nextTrack &&
+                          transitionScore &&
+                          (transitionScore.label === "Fraca" ||
+                            transitionScore.label === "Atenção")
+                            ? computeBridgeSuggestions(
+                                track,
+                                nextTrack,
+                                bridgePool,
+                                scoringWeights,
+                                new Set()
+                              )
+                            : undefined
+                        }
                       />
                     </div>
                   );
@@ -1231,6 +1347,18 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               )}
             </div>
           </section>
+        </div>
+
+        <div className="mt-8">
+          <EnergyArcChart points={energyPoints} />
+        </div>
+
+        <div className="mt-8 grid gap-8 lg:grid-cols-2">
+          <ScoringWeightsPanel
+            projectId={id}
+            currentWeights={scoringWeights ?? {}}
+          />
+          <CurationTimeline events={curationEvents} />
         </div>
 
         <div className="mt-8">

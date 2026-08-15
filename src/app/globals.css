@@ -1,43 +1,33 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-
-  /* Paleta MixBrain dark — inspirada na sensação visual do Claude:
-     grafite quente em vez de preto/azul frio, com acento âmbar/terracota. */
-  --mb-canvas: #1c1a19;
-  --mb-canvas-soft: #211f1d;
-  --mb-surface: #262422;
-  --mb-surface-hover: #2c2a27;
-  --mb-surface-strong: #322f2c;
-  --mb-border: rgba(255, 255, 255, 0.08);
-  --mb-border-strong: rgba(255, 255, 255, 0.16);
-  --mb-text-primary: #f3efe9;
-  --mb-text-secondary: #bdb6ae;
-  --mb-text-muted: #8d8781;
-  --mb-accent: #d97757;
-  --mb-accent-strong: #c8623f;
-  --mb-accent-soft: rgba(217, 119, 87, 0.14);
-  --mb-accent-text: #f2b79b;
-  --mb-danger: #e0655f;
-  --mb-danger-soft: rgba(224, 101, 95, 0.14);
-  --mb-success: #7fb88a;
-  --mb-success-soft: rgba(127, 184, 138, 0.14);
+  --background: #1e1d1b;
+  --foreground: #f3f1ea;
 }
 
+/*
+ * Paleta "Claude dark" — mesma família de cores do tema escuro do Claude.ai:
+ * fundo neutro quente (não azulado como o slate padrão do Tailwind) com
+ * acento terracota/coral. Usada em todo o MixBrain no lugar de slate+cyan.
+ */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-claude-bg: #1e1d1b;
+  --color-claude-surface: #262523;
+  --color-claude-surface-2: #302f2c;
+  --color-claude-surface-3: #3a3936;
+  --color-claude-border: #43413d;
+  --color-claude-text: #f3f1ea;
+  --color-claude-text-muted: #b8b3a6;
+  --color-claude-text-faint: #837e72;
+  --color-claude-accent: #d97757;
+  --color-claude-accent-hover: #e2916f;
+  --color-claude-accent-soft: #d9775733;
+  --color-claude-on-accent: #211d19;
 }
 
 body {

@@ -49,19 +49,19 @@ export default async function Home() {
   ];
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
+    <main className="min-h-screen bg-claude-bg text-claude-text">
       {/* HERO */}
       <section className="relative overflow-hidden px-6 py-20 sm:px-10 sm:py-32">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan-300/5 via-slate-950 to-violet-500/5" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-claude-accent/5 via-claude-bg to-violet-500/5" />
 
         <div className="relative mx-auto max-w-5xl text-center">
           <div className="mb-8 flex justify-center">
-            <div className="grid h-16 w-16 place-items-center rounded-2xl bg-cyan-300 text-3xl font-black text-slate-950">
+            <div className="grid h-16 w-16 place-items-center rounded-2xl bg-claude-accent text-3xl font-black text-claude-bg">
               M
             </div>
           </div>
 
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent-hover">
             Curadoria inteligente
           </p>
 
@@ -69,7 +69,7 @@ export default async function Home() {
             MixBrain
           </h1>
 
-          <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-slate-300 sm:text-xl">
+          <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-claude-text-muted sm:text-xl">
             Plataforma para DJs e produtores de música eletrônica que querem
             organizar, curar e estruturar sets com rigor. Cadastre sua
             biblioteca, crie projetos com direção narrativa, selecione
@@ -80,14 +80,14 @@ export default async function Home() {
             {isAuthenticated ? (
               <Link
                 href="/app"
-                className="rounded-xl bg-cyan-300 px-8 py-3 text-base font-bold text-slate-950 transition hover:bg-cyan-200"
+                className="rounded-xl bg-claude-accent px-8 py-3 text-base font-bold text-claude-bg transition hover:bg-claude-accent-hover"
               >
                 Entrar no workspace
               </Link>
             ) : (
               <Link
                 href="/login"
-                className="rounded-xl bg-cyan-300 px-8 py-3 text-base font-bold text-slate-950 transition hover:bg-cyan-200"
+                className="rounded-xl bg-claude-accent px-8 py-3 text-base font-bold text-claude-bg transition hover:bg-claude-accent-hover"
               >
                 Fazer login
               </Link>
@@ -97,9 +97,9 @@ export default async function Home() {
       </section>
 
       {/* FEATURES */}
-      <section className="border-t border-white/10 px-6 py-20 sm:px-10 sm:py-28">
+      <section className="border-t border-claude-border px-6 py-20 sm:px-10 sm:py-28">
         <div className="mx-auto max-w-5xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent-hover">
             O que o MixBrain faz
           </p>
 
@@ -107,7 +107,7 @@ export default async function Home() {
             Do catálogo ao set final
           </h2>
 
-          <p className="mt-5 max-w-2xl text-base leading-7 text-slate-400">
+          <p className="mt-5 max-w-2xl text-base leading-7 text-claude-text-muted">
             MixBrain cobre todo o fluxo: desde o cadastro individual de cada
             faixa até a montagem e versionamento de sets completos.
           </p>
@@ -116,15 +116,15 @@ export default async function Home() {
             {features.map((feature) => (
               <article
                 key={feature.number}
-                className="rounded-2xl border border-white/10 bg-slate-900/70 p-6"
+                className="rounded-2xl border border-claude-border bg-claude-surface/70 p-6"
               >
-                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-300">
+                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-claude-accent">
                   {feature.number}
                 </p>
-                <h3 className="mt-4 text-lg font-bold tracking-tight text-slate-100">
+                <h3 className="mt-4 text-lg font-bold tracking-tight text-claude-text">
                   {feature.title}
                 </h3>
-                <p className="mt-3 text-sm leading-7 text-slate-400">
+                <p className="mt-3 text-sm leading-7 text-claude-text-muted">
                   {feature.description}
                 </p>
               </article>
@@ -134,12 +134,12 @@ export default async function Home() {
       </section>
 
       {/* FOOTER CTA */}
-      <section className="border-t border-white/10 px-6 py-20 sm:px-10">
+      <section className="border-t border-claude-border px-6 py-20 sm:px-10">
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="text-3xl font-black tracking-tight sm:text-4xl">
             Pronto para começar?
           </h2>
-          <p className="mt-5 text-base leading-7 text-slate-400">
+          <p className="mt-5 text-base leading-7 text-claude-text-muted">
             Entre no workspace e crie seu primeiro projeto de set.
           </p>
 
@@ -147,14 +147,14 @@ export default async function Home() {
             {isAuthenticated ? (
               <Link
                 href="/app"
-                className="inline-block rounded-xl bg-cyan-300 px-8 py-3 text-base font-bold text-slate-950 transition hover:bg-cyan-200"
+                className="inline-block rounded-xl bg-claude-accent px-8 py-3 text-base font-bold text-claude-bg transition hover:bg-claude-accent-hover"
               >
                 Entrar no workspace
               </Link>
             ) : (
               <Link
                 href="/login"
-                className="inline-block rounded-xl bg-cyan-300 px-8 py-3 text-base font-bold text-slate-950 transition hover:bg-cyan-200"
+                className="inline-block rounded-xl bg-claude-accent px-8 py-3 text-base font-bold text-claude-bg transition hover:bg-claude-accent-hover"
               >
                 Fazer login
               </Link>

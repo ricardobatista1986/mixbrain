@@ -29,35 +29,35 @@ export default async function AppPage() {
   const archivedProjects = (projects ?? []).filter((project) => project.archived_at);
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100 sm:px-10">
+    <main className="min-h-screen bg-claude-bg px-6 py-10 text-claude-text sm:px-10">
       <div className="mx-auto max-w-6xl">
-        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-claude-border pb-6">
           <Link href="/" className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-cyan-300 font-black text-slate-950">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-claude-accent font-black text-claude-bg">
               M
             </div>
             <div>
               <p className="font-bold tracking-tight">MixBrain</p>
-              <p className="text-xs text-slate-400">Workspace privado</p>
+              <p className="text-xs text-claude-text-muted">Workspace privado</p>
             </div>
           </Link>
 
           <div className="flex items-center gap-3">
             <Link
               href="/app/tracks"
-              className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
+              className="rounded-full border border-claude-border px-4 py-2 text-sm font-medium text-claude-text-muted transition hover:border-claude-accent/50 hover:text-claude-accent-hover"
             >
               Biblioteca
             </Link>
             <Link
               href="/app/importar-csv"
-              className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
+              className="rounded-full border border-claude-border px-4 py-2 text-sm font-medium text-claude-text-muted transition hover:border-claude-accent/50 hover:text-claude-accent-hover"
             >
               Importar CSV
             </Link>
             <Link
               href="/app/glossario"
-              className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
+              className="rounded-full border border-claude-border px-4 py-2 text-sm font-medium text-claude-text-muted transition hover:border-claude-accent/50 hover:text-claude-accent-hover"
             >
               Glossário
             </Link>
@@ -65,8 +65,8 @@ export default async function AppPage() {
           </div>
         </header>
 
-        <section className="mt-10 rounded-3xl border border-cyan-300/20 bg-gradient-to-br from-cyan-300/10 via-slate-900 to-violet-500/10 p-8 sm:p-12">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">
+        <section className="mt-10 rounded-3xl border border-claude-accent/20 bg-gradient-to-br from-claude-accent/10 via-claude-surface to-violet-500/10 p-8 sm:p-12">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent-hover">
             Projetos de set
           </p>
 
@@ -74,7 +74,7 @@ export default async function AppPage() {
             Seu workspace agora conversa com o banco real.
           </h1>
 
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-300">
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-claude-text-muted">
             Crie projetos, organize a intenção narrativa de cada set e use esta
             base como ponto de partida para biblioteca, candidatas, blocos,
             versões e importação em lote da sua coleção.
@@ -84,45 +84,45 @@ export default async function AppPage() {
         <section className="mt-8 grid gap-4 md:grid-cols-3">
           <Link
             href="/app/tracks"
-            className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 transition hover:border-cyan-300/40 hover:bg-cyan-300/[0.04]"
+            className="rounded-3xl border border-claude-border bg-claude-surface p-6 transition hover:border-claude-accent/40 hover:bg-claude-accent/[0.04]"
           >
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
               Biblioteca
             </p>
             <h2 className="mt-2 text-2xl font-black tracking-tight">
               Ver tracks
             </h2>
-            <p className="mt-3 text-sm leading-6 text-slate-400">
+            <p className="mt-3 text-sm leading-6 text-claude-text-muted">
               Acesse sua biblioteca já cadastrada e use as tracks nos projetos.
             </p>
           </Link>
 
           <Link
             href="/app/importar-csv"
-            className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 transition hover:border-cyan-300/40 hover:bg-cyan-300/[0.04]"
+            className="rounded-3xl border border-claude-border bg-claude-surface p-6 transition hover:border-claude-accent/40 hover:bg-claude-accent/[0.04]"
           >
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
               Biblioteca
             </p>
             <h2 className="mt-2 text-2xl font-black tracking-tight">
               Importar CSV
             </h2>
-            <p className="mt-3 text-sm leading-6 text-slate-400">
+            <p className="mt-3 text-sm leading-6 text-claude-text-muted">
               Carregue várias tracks com BPM, key, energia, mood e notas em lote.
             </p>
           </Link>
 
           <Link
             href="/app/glossario"
-            className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 transition hover:border-cyan-300/40 hover:bg-cyan-300/[0.04]"
+            className="rounded-3xl border border-claude-border bg-claude-surface p-6 transition hover:border-claude-accent/40 hover:bg-claude-accent/[0.04]"
           >
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
               MixBrain
             </p>
             <h2 className="mt-2 text-2xl font-black tracking-tight">
               Abrir glossário
             </h2>
-            <p className="mt-3 text-sm leading-6 text-slate-400">
+            <p className="mt-3 text-sm leading-6 text-claude-text-muted">
               Consulte pesos, lógica de score e definições curatoriais do sistema.
             </p>
           </Link>
@@ -131,18 +131,18 @@ export default async function AppPage() {
         <div className="mt-10 grid gap-8 xl:grid-cols-[1.1fr_0.9fr]">
           <CreateProjectForm />
 
-          <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-cyan-950/20">
+          <section className="rounded-3xl border border-claude-border bg-claude-surface/70 p-6 shadow-2xl shadow-claude-bg/20">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-300">
+                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-claude-accent">
                   Projetos salvos
                 </p>
-                <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-50">
+                <h2 className="mt-3 text-2xl font-black tracking-tight text-claude-text">
                   Seus projetos
                 </h2>
               </div>
 
-              <div className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-400">
+              <div className="rounded-full border border-claude-border px-3 py-1 text-sm text-claude-text-muted">
                 {activeProjects.length} projeto(s)
               </div>
             </div>
@@ -152,37 +152,37 @@ export default async function AppPage() {
                 {activeProjects.map((project) => (
                   <div
                     key={project.id}
-                    className="rounded-2xl border border-white/10 bg-slate-950/70 p-5 transition hover:border-cyan-300/40"
+                    className="rounded-2xl border border-claude-border bg-claude-surface/70 p-5 transition hover:border-claude-accent/40"
                   >
                     <Link
                       href={`/app/projetos/${project.id}`}
-                      className="block rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-300/40"
+                      className="block rounded-xl focus:outline-none focus:ring-2 focus:ring-claude-accent/40"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <h3 className="text-lg font-bold tracking-tight text-slate-100">
+                          <h3 className="text-lg font-bold tracking-tight text-claude-text">
                             {project.name}
                           </h3>
-                          <p className="mt-2 text-sm leading-6 text-slate-400">
+                          <p className="mt-2 text-sm leading-6 text-claude-text-muted">
                             {project.description?.trim()
                               ? project.description
                               : "Sem descrição ainda."}
                           </p>
                         </div>
 
-                        <div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                        <div className="rounded-full border border-claude-accent/20 bg-claude-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-claude-accent-hover">
                           {project.target_duration_minutes
                             ? `${project.target_duration_minutes} min`
                             : "Sem duração"}
                         </div>
                       </div>
 
-                      <p className="mt-5 text-sm font-semibold text-cyan-200">
+                      <p className="mt-5 text-sm font-semibold text-claude-accent-hover">
                         Abrir projeto <span aria-hidden="true">→</span>
                       </p>
                     </Link>
 
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/5 pt-4">
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-claude-border/60 pt-4">
                       <ProjectCardActions projectId={project.id} archived={false} />
                       <DeleteProjectButton
                         projectId={project.id}
@@ -194,27 +194,27 @@ export default async function AppPage() {
                 ))}
               </div>
             ) : (
-              <div className="mt-8 rounded-2xl border border-dashed border-white/10 bg-slate-950/50 p-6 text-sm leading-7 text-slate-400">
+              <div className="mt-8 rounded-2xl border border-dashed border-claude-border bg-claude-surface/50 p-6 text-sm leading-7 text-claude-text-muted">
                 Nenhum projeto criado ainda. Use o formulário ao lado para criar
                 o primeiro projeto do MixBrain.
               </div>
             )}
 
             {archivedProjects.length > 0 ? (
-              <details className="mt-8 rounded-2xl border border-white/10 bg-slate-950/40">
-                <summary className="cursor-pointer list-none px-5 py-3 text-sm font-bold text-slate-400 transition hover:text-slate-200">
+              <details className="mt-8 rounded-2xl border border-claude-border bg-claude-surface/40">
+                <summary className="cursor-pointer list-none px-5 py-3 text-sm font-bold text-claude-text-muted transition hover:text-claude-text">
                   Arquivados ({archivedProjects.length})
                 </summary>
-                <div className="space-y-3 border-t border-white/10 p-5">
+                <div className="space-y-3 border-t border-claude-border p-5">
                   {archivedProjects.map((project) => (
                     <div
                       key={project.id}
-                      className="rounded-xl border border-white/10 bg-slate-950/60 p-4"
+                      className="rounded-xl border border-claude-border bg-claude-surface/60 p-4"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <Link
                           href={`/app/projetos/${project.id}`}
-                          className="text-sm font-semibold text-slate-300 hover:text-cyan-200"
+                          className="text-sm font-semibold text-claude-text-muted hover:text-claude-accent-hover"
                         >
                           {project.name}
                         </Link>

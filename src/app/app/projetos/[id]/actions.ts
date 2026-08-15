@@ -11,40 +11,7 @@ import type {
   ScoreTrack,
   ScoreTracklistItemContext,
 } from "@/lib/mixbrain/transition-score";
-
-import type { ScoringWeights } from "@/lib/mixbrain/transition-score";
-
-const DEFAULT_WEIGHTS: ScoringWeights = {
-bpm: 7,
-energy: 13,
-moment: 22,
-harmony: 16,
-texture: 9,
-diversity: 5,
-narrative: 28,
-};
-
-function parseWeights(input: Partial<ScoringWeights>): ScoringWeights {
-const keys = Object.keys(DEFAULT_WEIGHTS) as (keyof ScoringWeights)[];
-
-const weights = Object.fromEntries(
-keys.map((key) => {
-const value = Number(input[key] ?? DEFAULT_WEIGHTS[key]);
-
-if (!Number.isFinite(value) || value < 0 || value > 100) {
-throw new Error(`Peso inválido para ${key}.`);
-}
-
-return [key, value];
-})
-) as ScoringWeights;
-
-if (Object.values(weights).every((value) => value === 0)) {
-throw new Error("Pelo menos um peso deve ser maior que zero.");
-}
-
-return weights;
-}
+import { normalizeScoringWeights } from "@/lib/mixbrain/transition-score";
 
 type SupabaseLike = Awaited<ReturnType<typeof createClient>>;
 
@@ -303,6 +270,8 @@ export async function approveCandidateToTracklist(formData: FormData) {
     throw new Error(error.message);
   }
 
+  await logCurationEvent(supabase, userId, projectId, "track_included", { track_id: trackId });
+
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
@@ -344,6 +313,10 @@ export async function removeFromTracklist(formData: FormData) {
   }));
 
   await applyNewOrder(supabase, projectId, reordered);
+
+  await logCurationEvent(supabase, userId, projectId, "track_removed", {
+    tracklist_item_id: tracklistItemId,
+  });
 
   revalidatePath(`/app/projetos/${projectId}`);
 }
@@ -387,6 +360,11 @@ export async function createFrozenBlock(formData: FormData) {
     throw new Error(updateError.message);
   }
 
+  await logCurationEvent(supabase, userId, projectId, "block_frozen", {
+    block_name: blockName,
+    item_count: selectedItems.length,
+  });
+
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
@@ -421,6 +399,8 @@ export async function dissolveFrozenBlock(formData: FormData) {
   if (blockError) {
     throw new Error(blockError.message);
   }
+
+  await logCurationEvent(supabase, userId, projectId, "block_unfrozen", { block_id: blockId });
 
   revalidatePath(`/app/projetos/${projectId}`);
 }
@@ -748,6 +728,14 @@ export async function autoOrganizeTracklist(projectId: string) {
 
   await ensureProjectOwnership(supabase, projectId, userId);
 
+  const { data: projectRow } = await supabase
+    .from("set_projects")
+    .select("scoring_weights")
+    .eq("id", projectId)
+    .single();
+
+  const scoringWeights = normalizeScoringWeights(projectRow?.scoring_weights);
+
   const { data: existingItemsRaw, error: itemsError } = await supabase
     .from("set_tracklist_items")
     .select(
@@ -874,7 +862,7 @@ export async function autoOrganizeTracklist(projectId: string) {
     );
   }
 
-  const sequence = buildAutoSequence(units);
+  const sequence = buildAutoSequence(units, scoringWeights);
   const flatMembers = sequence.flatMap((unit) => unit.members);
 
   // Fase 1: joga todos os items existentes para posições negativas
@@ -1019,6 +1007,8 @@ export async function saveSetVersion(formData: FormData) {
     throw new Error(error.message);
   }
 
+  await logCurationEvent(supabase, userId, projectId, "set_version_saved", { name });
+
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
@@ -1125,6 +1115,11 @@ export async function restoreSetVersion(formData: FormData) {
     }
   }
 
+  await logCurationEvent(supabase, userId, projectId, "set_version_restored", {
+    version_id: versionId,
+    restored_count: rowsToInsert.length,
+  });
+
   revalidatePath(`/app/projetos/${projectId}`);
 
   return {
@@ -1217,6 +1212,15 @@ export async function recordTransitionDecision(formData: FormData) {
     throw new Error(error.message);
   }
 
+  await logCurationEvent(
+    supabase,
+    userId,
+    projectId,
+    decision === "approved" ? "transition_approved" : "transition_rejected",
+    { from_track_id: fromTrackId, to_track_id: toTrackId, explanation: explanation || null },
+    fromCandidate.id
+  );
+
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
@@ -1292,29 +1296,84 @@ export async function reorderTracklist(
   revalidatePath(`/app/projetos/${projectId}`);
 }
 
-export async function updateScoringWeights(
-projectId: string,
-weights: Partial<ScoringWeights>
+const SCORING_FACTOR_KEYS = [
+  "narrative",
+  "timing",
+  "harmony",
+  "energy",
+  "mood",
+  "bpm",
+  "diversity",
+] as const;
+
+export async function updateScoringWeights(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
+  const projectId = String(formData.get("project_id") || "");
+
+  if (!projectId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const weights: Record<string, number> = {};
+
+  for (const key of SCORING_FACTOR_KEYS) {
+    const raw = formData.get(key);
+    const value = typeof raw === "string" && raw.trim() !== "" ? Number(raw) : NaN;
+
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      throw new Error(`Peso de "${key}" inválido — use um número entre 0 e 100.`);
+    }
+
+    weights[key] = value;
+  }
+
+  const { error } = await supabase
+    .from("set_projects")
+    .update({ scoring_weights: weights })
+    .eq("id", projectId)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/app/projetos/${projectId}`);
+}
+
+/**
+ * Registra um evento na timeline de curadoria do projeto. Nunca derruba a
+ * ação principal se falhar — é um registro auxiliar, não uma etapa crítica
+ * do fluxo. Chamado a partir de outras actions deste arquivo.
+ */
+async function logCurationEvent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  projectId: string,
+  eventType:
+    | "track_included"
+    | "track_removed"
+    | "track_moved"
+    | "block_frozen"
+    | "block_unfrozen"
+    | "transition_approved"
+    | "transition_rejected"
+    | "set_version_saved"
+    | "set_version_restored",
+  payload: Record<string, unknown> = {},
+  candidateId?: string
 ) {
-const { supabase, userId } = await requireAuth();
-
-if (!projectId) {
-throw new Error("Projeto inválido.");
-}
-
-const parsed = parseWeights(weights);
-
-const { error } = await supabase
-.from("set_projects")
-.update({ scoring_weights: parsed })
-.eq("id", projectId)
-.eq("user_id", userId);
-
-if (error) {
-throw new Error(error.message);
-}
-
-revalidatePath(`/app/projetos/${projectId}`);
-
-return parsed;
+  try {
+    await supabase.from("curation_events").insert({
+      user_id: userId,
+      project_id: projectId,
+      candidate_id: candidateId ?? null,
+      event_type: eventType,
+      payload,
+    });
+  } catch {
+    // silencioso de propósito — timeline é auxiliar, não pode quebrar o fluxo principal
+  }
 }

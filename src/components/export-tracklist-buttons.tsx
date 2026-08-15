@@ -119,14 +119,14 @@ export function ExportTracklistButtons({
       <button
         type="button"
         onClick={() => downloadBlob(buildCsv(rows), `${baseName}.csv`, "text/csv")}
-        className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
+        className="rounded-lg border border-claude-border px-3 py-1.5 text-xs font-semibold text-claude-text-muted transition hover:border-claude-accent/50 hover:text-claude-accent-hover"
       >
         Exportar CSV
       </button>
       <button
         type="button"
         onClick={() => downloadBlob(buildTxt(rows, projectName), `${baseName}.txt`, "text/plain")}
-        className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
+        className="rounded-lg border border-claude-border px-3 py-1.5 text-xs font-semibold text-claude-text-muted transition hover:border-claude-accent/50 hover:text-claude-accent-hover"
       >
         Exportar TXT
       </button>

@@ -16,25 +16,7 @@ export type LibraryTrack = {
   created_at?: string;
 };
 
-type SortKey = "title" | "artist" | "bpm" | "energy" | "musical_key" | "created_at";
-type SortDir = "asc" | "desc";
-
-const SORT_LABELS: Record<SortKey, string> = {
-  title: "Título",
-  artist: "Artista",
-  bpm: "BPM",
-  energy: "Energia",
-  musical_key: "Tonalidade",
-  created_at: "Adicionada em",
-};
-
-const inputClass =
-  "w-full rounded-lg px-3 py-2 text-sm outline-none transition focus:ring-2";
-const inputStyle = {
-  background: "var(--mb-canvas-soft)",
-  border: "1px solid var(--mb-border)",
-  color: "var(--mb-text-primary)",
-} as const;
+type SortKey = "recent" | "artist" | "title" | "bpm" | "energy";
 
 function formatBpm(value: number | null) {
   if (value === null) return "—";
@@ -43,30 +25,6 @@ function formatBpm(value: number | null) {
     maximumFractionDigits: 2,
   });
 }
-
-function normalize(value: string) {
-  return value.toLocaleLowerCase("pt-BR");
-}
-
-type Filters = {
-  minBpm: string;
-  maxBpm: string;
-  minEnergy: string;
-  maxEnergy: string;
-  musicalKey: string;
-  mood: string;
-  source: string;
-};
-
-const emptyFilters: Filters = {
-  minBpm: "",
-  maxBpm: "",
-  minEnergy: "",
-  maxEnergy: "",
-  musicalKey: "",
-  mood: "",
-  source: "",
-};
 
 function matchesQuery(track: LibraryTrack, query: string) {
   if (!query) return true;
@@ -86,64 +44,6 @@ function matchesQuery(track: LibraryTrack, query: string) {
     .toLocaleLowerCase("pt-BR");
 
   return haystack.includes(query.toLocaleLowerCase("pt-BR"));
-}
-
-function matchesFilters(track: LibraryTrack, filters: Filters) {
-  const minBpm = filters.minBpm ? Number(filters.minBpm) : null;
-  const maxBpm = filters.maxBpm ? Number(filters.maxBpm) : null;
-  const minEnergy = filters.minEnergy ? Number(filters.minEnergy) : null;
-  const maxEnergy = filters.maxEnergy ? Number(filters.maxEnergy) : null;
-
-  if (minBpm !== null && (track.bpm === null || track.bpm < minBpm)) return false;
-  if (maxBpm !== null && (track.bpm === null || track.bpm > maxBpm)) return false;
-  if (minEnergy !== null && (track.energy === null || track.energy < minEnergy)) return false;
-  if (maxEnergy !== null && (track.energy === null || track.energy > maxEnergy)) return false;
-
-  if (filters.musicalKey) {
-    const key = track.musical_key ?? "";
-    if (!normalize(key).includes(normalize(filters.musicalKey))) return false;
-  }
-
-  if (filters.mood) {
-    const mood = track.mood ?? "";
-    if (!normalize(mood).includes(normalize(filters.mood))) return false;
-  }
-
-  if (filters.source && filters.source !== "__all__") {
-    if ((track.source ?? "Sem origem") !== filters.source) return false;
-  }
-
-  return true;
-}
-
-function compareTracks(a: LibraryTrack, b: LibraryTrack, sortKey: SortKey, sortDir: SortDir) {
-  const dir = sortDir === "asc" ? 1 : -1;
-
-  const getValue = (track: LibraryTrack): string | number => {
-    switch (sortKey) {
-      case "bpm":
-        return track.bpm ?? -1;
-      case "energy":
-        return track.energy ?? -1;
-      case "musical_key":
-        return track.musical_key ?? "";
-      case "created_at":
-        return track.created_at ?? "";
-      case "artist":
-        return normalize(track.artist ?? "");
-      default:
-        return normalize(track.title ?? "");
-    }
-  };
-
-  const valueA = getValue(a);
-  const valueB = getValue(b);
-
-  if (typeof valueA === "number" && typeof valueB === "number") {
-    return (valueA - valueB) * dir;
-  }
-
-  return String(valueA).localeCompare(String(valueB), "pt-BR") * dir;
 }
 
 function TrackEditForm({
@@ -174,73 +74,104 @@ function TrackEditForm({
   return (
     <form
       action={handleSubmit}
-      className="col-span-full mt-2 grid gap-3 rounded-xl p-4"
-      style={{ background: "var(--mb-canvas-soft)", border: "1px solid var(--mb-accent-soft)" }}
+      className="grid gap-3 border-t border-claude-border bg-claude-surface-2 p-4"
     >
       <div className="grid gap-3 md:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-xs font-medium" style={{ color: "var(--mb-text-muted)" }}>
-            Título
-          </span>
-          <input type="text" name="title" required maxLength={200} defaultValue={track.title} className={inputClass} style={inputStyle} />
+          <span className="mb-1 block text-xs font-medium text-claude-text-muted">Título</span>
+          <input
+            type="text"
+            name="title"
+            required
+            maxLength={200}
+            defaultValue={track.title}
+            className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
+          />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium" style={{ color: "var(--mb-text-muted)" }}>
-            Artista
-          </span>
-          <input type="text" name="artist" required maxLength={200} defaultValue={track.artist} className={inputClass} style={inputStyle} />
+          <span className="mb-1 block text-xs font-medium text-claude-text-muted">Artista</span>
+          <input
+            type="text"
+            name="artist"
+            required
+            maxLength={200}
+            defaultValue={track.artist}
+            className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
+          />
         </label>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
         <label className="block">
-          <span className="mb-1 block text-xs font-medium" style={{ color: "var(--mb-text-muted)" }}>
-            BPM
-          </span>
-          <input type="number" name="bpm" min={1} step={0.01} defaultValue={track.bpm ?? ""} className={inputClass} style={inputStyle} />
+          <span className="mb-1 block text-xs font-medium text-claude-text-muted">BPM</span>
+          <input
+            type="number"
+            name="bpm"
+            min={1}
+            step={0.01}
+            defaultValue={track.bpm ?? ""}
+            className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
+          />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium" style={{ color: "var(--mb-text-muted)" }}>
-            Tonalidade
-          </span>
-          <input type="text" name="musicalKey" maxLength={32} defaultValue={track.musical_key ?? ""} className={inputClass} style={inputStyle} />
+          <span className="mb-1 block text-xs font-medium text-claude-text-muted">Tonalidade</span>
+          <input
+            type="text"
+            name="musicalKey"
+            maxLength={32}
+            defaultValue={track.musical_key ?? ""}
+            className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
+          />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium" style={{ color: "var(--mb-text-muted)" }}>
-            Energia
-          </span>
-          <input type="number" name="energy" min={1} max={10} step={1} defaultValue={track.energy ?? ""} className={inputClass} style={inputStyle} />
+          <span className="mb-1 block text-xs font-medium text-claude-text-muted">Energia</span>
+          <input
+            type="number"
+            name="energy"
+            min={1}
+            max={10}
+            step={1}
+            defaultValue={track.energy ?? ""}
+            className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
+          />
         </label>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-xs font-medium" style={{ color: "var(--mb-text-muted)" }}>
-            Mood
-          </span>
-          <input type="text" name="mood" maxLength={120} defaultValue={track.mood ?? ""} className={inputClass} style={inputStyle} />
+          <span className="mb-1 block text-xs font-medium text-claude-text-muted">Mood</span>
+          <input
+            type="text"
+            name="mood"
+            maxLength={120}
+            defaultValue={track.mood ?? ""}
+            className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
+          />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium" style={{ color: "var(--mb-text-muted)" }}>
-            Origem
-          </span>
-          <input type="text" name="source" maxLength={120} defaultValue={track.source ?? ""} className={inputClass} style={inputStyle} />
+          <span className="mb-1 block text-xs font-medium text-claude-text-muted">Origem</span>
+          <input
+            type="text"
+            name="source"
+            maxLength={120}
+            defaultValue={track.source ?? ""}
+            className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
+          />
         </label>
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-xs font-medium" style={{ color: "var(--mb-text-muted)" }}>
-          Observações
-        </span>
-        <textarea name="notes" rows={3} defaultValue={track.notes ?? ""} className={inputClass} style={inputStyle} />
+        <span className="mb-1 block text-xs font-medium text-claude-text-muted">Observações</span>
+        <textarea
+          name="notes"
+          rows={2}
+          defaultValue={track.notes ?? ""}
+          className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
+        />
       </label>
 
       {errorMessage ? (
-        <p
-          role="alert"
-          className="rounded-lg px-3 py-2 text-xs"
-          style={{ background: "var(--mb-danger-soft)", color: "#f7c9c6", border: "1px solid var(--mb-danger)" }}
-        >
+        <p role="alert" className="rounded-lg border border-rose-300/20 bg-rose-300/10 px-3 py-2 text-xs text-rose-200">
           {errorMessage}
         </p>
       ) : null}
@@ -249,8 +180,7 @@ function TrackEditForm({
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-lg px-4 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60"
-          style={{ background: "var(--mb-accent)", color: "#1c1a19" }}
+          className="rounded-lg bg-claude-accent px-4 py-2 text-xs font-bold text-claude-on-accent transition hover:bg-claude-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Salvando..." : "Salvar alterações"}
         </button>
@@ -258,8 +188,7 @@ function TrackEditForm({
           type="button"
           onClick={onDone}
           disabled={isPending}
-          className="rounded-lg px-4 py-2 text-xs font-medium"
-          style={{ border: "1px solid var(--mb-border)", color: "var(--mb-text-secondary)" }}
+          className="rounded-lg border border-claude-border px-4 py-2 text-xs font-medium text-claude-text-muted hover:text-claude-text"
         >
           Cancelar
         </button>
@@ -289,9 +218,11 @@ function DeleteTrackControl({ track }: { track: LibraryTrack }) {
     return (
       <button
         type="button"
-        onClick={() => setConfirming(true)}
-        className="text-xs font-medium transition"
-        style={{ color: "var(--mb-danger)" }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setConfirming(true);
+        }}
+        className="text-xs text-rose-400 hover:text-rose-300"
       >
         Excluir
       </button>
@@ -299,339 +230,209 @@ function DeleteTrackControl({ track }: { track: LibraryTrack }) {
   }
 
   return (
-    <span className="inline-flex flex-col items-end gap-1">
-      <span className="text-right text-[11px] leading-4" style={{ color: "var(--mb-danger)" }}>
-        Remove de candidatas/tracklist em todos os projetos.
-      </span>
-      {error ? <span className="text-[11px]" style={{ color: "var(--mb-danger)" }}>{error}</span> : null}
-      <span className="inline-flex gap-2">
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={isPending}
-          className="text-xs font-bold disabled:opacity-60"
-          style={{ color: "var(--mb-danger)" }}
-        >
-          {isPending ? "Excluindo..." : "Confirmar"}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setConfirming(false);
-            setError("");
-          }}
-          disabled={isPending}
-          className="text-xs"
-          style={{ color: "var(--mb-text-muted)" }}
-        >
-          Cancelar
-        </button>
-      </span>
+    <span className="inline-flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+      {error ? <span className="text-[11px] text-rose-300">{error}</span> : null}
+      <button
+        type="button"
+        onClick={handleDelete}
+        disabled={isPending}
+        className="text-xs font-bold text-rose-300 hover:text-rose-200 disabled:opacity-60"
+      >
+        {isPending ? "..." : "Confirmar"}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setConfirming(false);
+          setError("");
+        }}
+        disabled={isPending}
+        className="text-xs text-claude-text-muted hover:text-claude-text"
+      >
+        Cancelar
+      </button>
     </span>
   );
 }
 
 export function TracksLibrary({ tracks }: { tracks: LibraryTrack[] }) {
   const [query, setQuery] = useState("");
+  const [keyFilter, setKeyFilter] = useState("");
+  const [energyMin, setEnergyMin] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("recent");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState<Filters>(emptyFilters);
-  const [sortKey, setSortKey] = useState<SortKey>("created_at");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  const sourceOptions = useMemo(() => {
-    const values = new Set<string>();
-    tracks.forEach((track) => values.add(track.source?.trim() ? track.source : "Sem origem"));
-    return Array.from(values).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const availableKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const track of tracks) {
+      if (track.musical_key) keys.add(track.musical_key);
+    }
+    return [...keys].sort();
   }, [tracks]);
 
-  const activeFilterCount = Object.values(filters).filter((value) => value && value !== "__all__").length;
-
   const filtered = useMemo(() => {
-    return tracks
-      .filter((track) => matchesQuery(track, query))
-      .filter((track) => matchesFilters(track, filters))
-      .sort((a, b) => compareTracks(a, b, sortKey, sortDir));
-  }, [tracks, query, filters, sortKey, sortDir]);
+    const minEnergy = energyMin.trim() ? Number(energyMin) : null;
 
-  function updateFilter<K extends keyof Filters>(key: K, value: Filters[K]) {
-    setFilters((current) => ({ ...current, [key]: value }));
-  }
+    const result = tracks
+      .filter((track) => matchesQuery(track, query))
+      .filter((track) => !keyFilter || track.musical_key === keyFilter)
+      .filter((track) => minEnergy === null || (track.energy ?? 0) >= minEnergy);
+
+    const sorted = [...result];
+    switch (sortKey) {
+      case "artist":
+        sorted.sort((a, b) => a.artist.localeCompare(b.artist, "pt-BR"));
+        break;
+      case "title":
+        sorted.sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
+        break;
+      case "bpm":
+        sorted.sort((a, b) => (b.bpm ?? -1) - (a.bpm ?? -1));
+        break;
+      case "energy":
+        sorted.sort((a, b) => (b.energy ?? -1) - (a.energy ?? -1));
+        break;
+      case "recent":
+      default:
+        sorted.sort((a, b) =>
+          (b.created_at ?? "").localeCompare(a.created_at ?? "")
+        );
+        break;
+    }
+
+    return sorted;
+  }, [tracks, query, keyFilter, energyMin, sortKey]);
 
   return (
-    <section
-      className="flex flex-col rounded-3xl p-6"
-      style={{ border: "1px solid var(--mb-border)", background: "var(--mb-surface)" }}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p
-            className="text-sm font-semibold uppercase tracking-[0.22em]"
-            style={{ color: "var(--mb-accent-text)" }}
-          >
-            Catálogo atual
-          </p>
-          <h2 className="mt-3 text-2xl font-black tracking-tight" style={{ color: "var(--mb-text-primary)" }}>
-            {tracks.length} tracks cadastradas
-          </h2>
-        </div>
+    <section className="flex h-full flex-col rounded-3xl border border-claude-border bg-claude-surface">
+      <div className="border-b border-claude-border p-6">
+        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-claude-accent">
+          Catálogo atual
+        </p>
+        <h2 className="mt-2 text-2xl font-black tracking-tight text-claude-text">
+          {tracks.length} tracks cadastradas
+        </h2>
+
         {tracks.length > 0 ? (
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((open) => !open)}
-            className="rounded-full px-4 py-2 text-xs font-semibold transition"
-            style={{
-              border: "1px solid var(--mb-border-strong)",
-              color: activeFilterCount > 0 ? "var(--mb-accent-text)" : "var(--mb-text-secondary)",
-              background: activeFilterCount > 0 ? "var(--mb-accent-soft)" : "transparent",
-            }}
-          >
-            Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-          </button>
+          <div className="mt-5 space-y-3">
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar por título, artista, key, mood..."
+              className="w-full rounded-xl border border-claude-border bg-claude-surface-2 px-4 py-2.5 text-sm text-claude-text outline-none transition placeholder:text-claude-text-faint focus:border-claude-accent"
+            />
+
+            <div className="flex flex-wrap gap-2">
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
+                className="rounded-lg border border-claude-border bg-claude-surface-2 px-3 py-1.5 text-xs text-claude-text outline-none"
+              >
+                <option value="recent">Mais recentes</option>
+                <option value="artist">Artista (A–Z)</option>
+                <option value="title">Título (A–Z)</option>
+                <option value="bpm">BPM (maior primeiro)</option>
+                <option value="energy">Energia (maior primeiro)</option>
+              </select>
+
+              <select
+                value={keyFilter}
+                onChange={(e) => setKeyFilter(e.target.value)}
+                className="rounded-lg border border-claude-border bg-claude-surface-2 px-3 py-1.5 text-xs text-claude-text outline-none"
+              >
+                <option value="">Todas as keys</option>
+                {availableKeys.map((key) => (
+                  <option key={key} value={key}>
+                    {key}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={energyMin}
+                onChange={(e) => setEnergyMin(e.target.value)}
+                placeholder="Energia mín."
+                className="w-28 rounded-lg border border-claude-border bg-claude-surface-2 px-3 py-1.5 text-xs text-claude-text outline-none"
+              />
+            </div>
+
+            {query || keyFilter || energyMin ? (
+              <p className="text-xs text-claude-text-faint">
+                {filtered.length} de {tracks.length} tracks correspondem ao filtro.
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
-      {tracks.length > 0 ? (
-        <div className="mt-5 flex flex-col gap-3">
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por título, artista, key, mood..."
-            className={inputClass}
-            style={{ ...inputStyle, padding: "0.75rem 1rem" }}
-          />
-
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 text-xs" style={{ color: "var(--mb-text-muted)" }}>
-              Ordenar por
-              <select
-                value={sortKey}
-                onChange={(event) => setSortKey(event.target.value as SortKey)}
-                className="rounded-lg px-2 py-1.5 text-xs"
-                style={inputStyle}
-              >
-                {Object.entries(SORT_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={() => setSortDir((dir) => (dir === "asc" ? "desc" : "asc"))}
-              className="rounded-lg px-2.5 py-1.5 text-xs font-medium"
-              style={inputStyle}
-              title={sortDir === "asc" ? "Crescente" : "Decrescente"}
-            >
-              {sortDir === "asc" ? "↑ Crescente" : "↓ Decrescente"}
-            </button>
-
-            {(query || activeFilterCount > 0) ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery("");
-                  setFilters(emptyFilters);
-                }}
-                className="text-xs font-medium"
-                style={{ color: "var(--mb-accent-text)" }}
-              >
-                Limpar busca e filtros
-              </button>
-            ) : null}
-          </div>
-
-          {filtersOpen ? (
-            <div
-              className="grid gap-3 rounded-xl p-4 sm:grid-cols-2 lg:grid-cols-3"
-              style={{ background: "var(--mb-canvas-soft)", border: "1px solid var(--mb-border)" }}
-            >
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  placeholder="BPM mín."
-                  value={filters.minBpm}
-                  onChange={(event) => updateFilter("minBpm", event.target.value)}
-                  className={inputClass}
-                  style={inputStyle}
-                />
-                <input
-                  type="number"
-                  placeholder="BPM máx."
-                  value={filters.maxBpm}
-                  onChange={(event) => updateFilter("maxBpm", event.target.value)}
-                  className={inputClass}
-                  style={inputStyle}
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  placeholder="Energia mín."
-                  value={filters.minEnergy}
-                  onChange={(event) => updateFilter("minEnergy", event.target.value)}
-                  className={inputClass}
-                  style={inputStyle}
-                />
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  placeholder="Energia máx."
-                  value={filters.maxEnergy}
-                  onChange={(event) => updateFilter("maxEnergy", event.target.value)}
-                  className={inputClass}
-                  style={inputStyle}
-                />
-              </div>
-
-              <input
-                type="text"
-                placeholder="Tonalidade contém..."
-                value={filters.musicalKey}
-                onChange={(event) => updateFilter("musicalKey", event.target.value)}
-                className={inputClass}
-                style={inputStyle}
-              />
-
-              <input
-                type="text"
-                placeholder="Mood contém..."
-                value={filters.mood}
-                onChange={(event) => updateFilter("mood", event.target.value)}
-                className={inputClass}
-                style={inputStyle}
-              />
-
-              <select
-                value={filters.source || "__all__"}
-                onChange={(event) => updateFilter("source", event.target.value)}
-                className={inputClass}
-                style={inputStyle}
-              >
-                <option value="__all__">Todas as origens</option>
-                {sourceOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
-
-          <p className="text-xs" style={{ color: "var(--mb-text-muted)" }}>
-            {filtered.length} de {tracks.length} tracks exibidas.
-          </p>
-        </div>
-      ) : null}
-
-      {tracks.length > 0 ? (
-        filtered.length > 0 ? (
-          <div
-            className="mt-4 flex-1 overflow-y-auto rounded-2xl"
-            style={{ border: "1px solid var(--mb-border)", maxHeight: "65vh" }}
-          >
-            <div
-              className="grid grid-cols-[2.2fr_0.7fr_0.8fr_0.7fr_1fr_1fr_auto] gap-3 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em]"
-              style={{
-                position: "sticky",
-                top: 0,
-                background: "var(--mb-surface-strong)",
-                color: "var(--mb-text-muted)",
-                borderBottom: "1px solid var(--mb-border)",
-              }}
-            >
-              <span>Título / Artista</span>
-              <span>BPM</span>
-              <span>Tonalidade</span>
-              <span>Energia</span>
-              <span>Mood</span>
-              <span>Origem</span>
-              <span className="text-right">Ações</span>
-            </div>
-
-            <div>
-              {filtered.map((track) => (
-                <div
-                  key={track.id}
-                  className="grid grid-cols-[2.2fr_0.7fr_0.8fr_0.7fr_1fr_1fr_auto] items-center gap-3 px-4 py-3 text-sm transition"
-                  style={{ borderBottom: "1px solid var(--mb-border)" }}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold" style={{ color: "var(--mb-text-primary)" }}>
-                      {track.title}
-                    </p>
-                    <p className="truncate text-xs" style={{ color: "var(--mb-text-muted)" }}>
-                      {track.artist}
-                    </p>
-                  </div>
-                  <span style={{ color: "var(--mb-text-secondary)" }}>{formatBpm(track.bpm)}</span>
-                  <span style={{ color: "var(--mb-text-secondary)" }}>
-                    {track.musical_key?.trim() ? track.musical_key : "—"}
-                  </span>
-                  <span>
-                    {track.energy ? (
-                      <span
-                        className="rounded-full px-2 py-0.5 text-xs font-semibold"
-                        style={{ background: "var(--mb-accent-soft)", color: "var(--mb-accent-text)" }}
-                      >
-                        {track.energy}/10
-                      </span>
-                    ) : (
-                      <span style={{ color: "var(--mb-text-muted)" }}>—</span>
-                    )}
-                  </span>
-                  <span className="truncate" style={{ color: "var(--mb-text-secondary)" }}>
-                    {track.mood?.trim() ? track.mood : "—"}
-                  </span>
-                  <span className="truncate" style={{ color: "var(--mb-text-secondary)" }}>
-                    {track.source?.trim() ? track.source : "—"}
-                  </span>
-                  <span className="flex items-center justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEditingId((current) => (current === track.id ? null : track.id))
-                      }
-                      className="text-xs font-medium"
-                      style={{ color: "var(--mb-accent-text)" }}
-                    >
-                      {editingId === track.id ? "Fechar" : "Editar"}
-                    </button>
-                    <DeleteTrackControl track={track} />
-                  </span>
-
-                  {editingId === track.id ? (
-                    <TrackEditForm track={track} onDone={() => setEditingId(null)} />
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div
-            className="mt-6 rounded-2xl p-6"
-            style={{ border: "1px dashed var(--mb-border)", background: "var(--mb-canvas-soft)" }}
-          >
-            <p className="text-sm leading-7" style={{ color: "var(--mb-text-secondary)" }}>
-              Nenhuma track corresponde à busca ou aos filtros aplicados.
+      {tracks.length === 0 ? (
+        <div className="p-6">
+          <div className="rounded-2xl border border-dashed border-claude-border bg-claude-surface-2 p-6">
+            <p className="text-sm leading-7 text-claude-text-muted">
+              Nenhuma track cadastrada ainda. Use o formulário ao lado para criar a
+              primeira entrada da biblioteca.
             </p>
           </div>
-        )
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="p-6">
+          <div className="rounded-2xl border border-dashed border-claude-border bg-claude-surface-2 p-6">
+            <p className="text-sm leading-7 text-claude-text-muted">
+              Nenhuma track corresponde à busca &quot;{query}&quot;.
+            </p>
+          </div>
+        </div>
       ) : (
-        <div
-          className="mt-6 rounded-2xl p-6"
-          style={{ border: "1px dashed var(--mb-border)", background: "var(--mb-canvas-soft)" }}
-        >
-          <p className="text-sm leading-7" style={{ color: "var(--mb-text-secondary)" }}>
-            Nenhuma track cadastrada ainda. Use o formulário ao lado para criar a
-            primeira entrada da biblioteca.
-          </p>
+        <div className="max-h-[640px] flex-1 overflow-y-auto">
+          {filtered.map((track, index) => (
+            <div key={track.id} className="border-b border-claude-border last:border-b-0">
+              <div
+                onClick={() =>
+                  setEditingId((current) => (current === track.id ? null : track.id))
+                }
+                className="flex cursor-pointer items-center gap-4 px-6 py-3 transition hover:bg-claude-surface-2"
+              >
+                <span className="w-5 shrink-0 text-right text-xs text-claude-text-faint">
+                  {index + 1}
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-claude-text">
+                    {track.title}
+                  </p>
+                  <p className="truncate text-xs text-claude-text-muted">{track.artist}</p>
+                </div>
+
+                <div className="hidden shrink-0 items-center gap-4 text-xs text-claude-text-muted sm:flex">
+                  <span className="w-16 text-right">{formatBpm(track.bpm)} BPM</span>
+                  <span className="w-10">{track.musical_key ?? "—"}</span>
+                  <span className="w-16">
+                    {track.energy ? `Energia ${track.energy}/10` : "—"}
+                  </span>
+                  {track.mood ? (
+                    <span className="max-w-[140px] truncate rounded-full border border-claude-accent/20 bg-claude-accent/10 px-2 py-0.5 text-claude-accent">
+                      {track.mood}
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="text-xs font-semibold text-claude-accent">
+                    {editingId === track.id ? "Fechar" : "Editar"}
+                  </span>
+                  <DeleteTrackControl track={track} />
+                </div>
+              </div>
+
+              {editingId === track.id ? (
+                <TrackEditForm track={track} onDone={() => setEditingId(null)} />
+              ) : null}
+            </div>
+          ))}
         </div>
       )}
     </section>

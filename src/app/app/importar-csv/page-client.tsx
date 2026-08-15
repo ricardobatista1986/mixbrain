@@ -568,16 +568,16 @@ export default function ImportarCsvClientPage({
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,_rgba(34,211,238,0.14),_transparent_40%)]">
+    <main className="min-h-screen bg-claude-bg text-claude-text">
+      <section className="border-b border-claude-border bg-[radial-gradient(circle_at_top_right,_rgba(34,211,238,0.14),_transparent_40%)]">
         <div className="mx-auto max-w-6xl px-6 py-14 sm:px-10 lg:px-12">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
             Biblioteca e Projetos
           </p>
           <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-5xl">
             Importar CSV para um projeto
           </h1>
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-300">
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-claude-text-muted">
             Toda linha válida entra na biblioteca (reaproveitando tracks já
             existentes) e é adicionada como candidata do projeto escolhido —
             inclusive se parecer duplicada. Arquivos grandes (milhares de
@@ -587,7 +587,7 @@ export default function ImportarCsvClientPage({
           <div className="mt-6">
             <Link
               href="/app"
-              className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-100"
+              className="rounded-full border border-claude-border px-4 py-2 text-sm font-medium text-claude-text-muted transition hover:border-claude-accent/50 hover:text-claude-accent-hover"
             >
               Voltar ao workspace
             </Link>
@@ -596,9 +596,9 @@ export default function ImportarCsvClientPage({
       </section>
 
       <section className="mx-auto max-w-6xl px-6 py-10 sm:px-10 lg:px-12">
-        <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+        <div className="rounded-3xl border border-claude-border bg-claude-surface p-6">
           <h2 className="text-2xl font-black tracking-tight">1. Projeto de destino</h2>
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-sm text-claude-text-muted">
             Escolha qual projeto vai receber as tracks como candidatas.
           </p>
 
@@ -606,7 +606,7 @@ export default function ImportarCsvClientPage({
             <select
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-3 text-sm text-slate-100 outline-none"
+              className="w-full rounded-xl border border-claude-border bg-claude-surface px-3 py-3 text-sm text-claude-text outline-none"
             >
               <option value="">Selecione um projeto...</option>
               {projects.map((project) => (
@@ -617,12 +617,12 @@ export default function ImportarCsvClientPage({
             </select>
           </div>
 
-          <label className="mt-4 flex items-start gap-3 text-sm text-slate-300">
+          <label className="mt-4 flex items-start gap-3 text-sm text-claude-text-muted">
             <input
               type="checkbox"
               checked={autoOrganizeAfter}
               onChange={(e) => setAutoOrganizeAfter(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900"
+              className="mt-1 h-4 w-4 rounded border-claude-border bg-claude-surface"
             />
             <span>
               Gerar a ordem da tracklist automaticamente ao final da
@@ -633,9 +633,9 @@ export default function ImportarCsvClientPage({
           </label>
         </div>
 
-        <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+        <div className="mt-8 rounded-3xl border border-claude-border bg-claude-surface p-6">
           <h2 className="text-2xl font-black tracking-tight">2. Upload</h2>
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-sm text-claude-text-muted">
             Envie um CSV com cabeçalho. O sistema tentará reconhecer as colunas automaticamente.
           </p>
 
@@ -644,25 +644,25 @@ export default function ImportarCsvClientPage({
               type="file"
               accept=".csv,text/csv"
               onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-              className="block w-full rounded-xl border border-white/10 bg-slate-900 p-3 text-sm text-slate-200"
+              className="block w-full rounded-xl border border-claude-border bg-claude-surface p-3 text-sm text-claude-text"
             />
           </div>
 
           {fileName ? (
-            <p className="mt-3 text-sm text-slate-300">Arquivo carregado: {fileName}</p>
+            <p className="mt-3 text-sm text-claude-text-muted">Arquivo carregado: {fileName}</p>
           ) : null}
 
           {progress ? (
             <div className="mt-4">
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-claude-surface-3">
                 <div
-                  className="h-full bg-cyan-300 transition-all"
+                  className="h-full bg-claude-accent transition-all"
                   style={{
                     width: `${Math.round((progress.done / Math.max(progress.total, 1)) * 100)}%`,
                   }}
                 />
               </div>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-claude-text-muted">
                 Importando {progress.done} de {progress.total} linha(s)...
               </p>
             </div>
@@ -686,9 +686,9 @@ export default function ImportarCsvClientPage({
           ) : null}
         </div>
 
-        <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+        <div className="mt-8 rounded-3xl border border-claude-border bg-claude-surface p-6">
           <h2 className="text-2xl font-black tracking-tight">3. Mapeamento de colunas</h2>
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-sm text-claude-text-muted">
             Confirme quais colunas do CSV correspondem aos campos do MixBrain.
             Apenas o Título é obrigatório. BPM, energia e demais campos numéricos
             que não puderem ser lidos ficam em branco, mas não descartam a track.
@@ -701,13 +701,13 @@ export default function ImportarCsvClientPage({
           </p>
 
           {headers.length > 0 ? (
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="mt-3 text-xs text-claude-text0">
               Cabeçalhos detectados no arquivo: {headers.join(", ")}
             </p>
           ) : null}
 
           {headers.length === 0 ? (
-            <div className="mt-6 rounded-2xl border border-dashed border-white/10 p-6 text-center text-slate-400">
+            <div className="mt-6 rounded-2xl border border-dashed border-claude-border p-6 text-center text-claude-text-muted">
               Envie um CSV para começar o mapeamento.
             </div>
           ) : (
@@ -716,9 +716,9 @@ export default function ImportarCsvClientPage({
                 {MAIN_FIELDS.map((field) => (
                   <div
                     key={field}
-                    className="rounded-2xl border border-white/10 bg-slate-900/50 p-4"
+                    className="rounded-2xl border border-claude-border bg-claude-surface/50 p-4"
                   >
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-claude-text-muted">
                       {FIELD_LABELS[field]}
                       {REQUIRED_FIELDS.includes(field) ? " *" : ""}
                     </label>
@@ -728,7 +728,7 @@ export default function ImportarCsvClientPage({
                       onChange={(e) =>
                         setMapping((current) => ({ ...current, [field]: e.target.value }))
                       }
-                      className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none"
+                      className="w-full rounded-xl border border-claude-border bg-claude-bg px-3 py-2 text-sm text-claude-text outline-none"
                     >
                       <option value="">Não mapear</option>
                       {headers.map((header) => (
@@ -741,12 +741,12 @@ export default function ImportarCsvClientPage({
                 ))}
               </div>
 
-              <details className="mt-6 rounded-2xl border border-white/10 bg-slate-900/30 p-4">
-                <summary className="cursor-pointer text-sm font-bold text-cyan-200">
+              <details className="mt-6 rounded-2xl border border-claude-border bg-claude-surface/30 p-4">
+                <summary className="cursor-pointer text-sm font-bold text-claude-accent-hover">
                   Avançado — features de áudio (opcional, usadas para
                   enriquecer o mood automaticamente)
                 </summary>
-                <p className="mt-3 text-xs leading-5 text-slate-400">
+                <p className="mt-3 text-xs leading-5 text-claude-text-muted">
                   Se o CSV tiver colunas como Valence, Danceability,
                   Acousticness, Instrumentalness ou Speechiness (padrão
                   Spotify/Chosic), o MixBrain deriva tags de mood
@@ -759,9 +759,9 @@ export default function ImportarCsvClientPage({
                   {FEATURE_FIELDS.map((field) => (
                     <div
                       key={field}
-                      className="rounded-2xl border border-white/10 bg-slate-950/50 p-4"
+                      className="rounded-2xl border border-claude-border bg-claude-surface/50 p-4"
                     >
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                      <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-claude-text-muted">
                         {FIELD_LABELS[field]}
                       </label>
                       <select
@@ -769,7 +769,7 @@ export default function ImportarCsvClientPage({
                         onChange={(e) =>
                           setMapping((current) => ({ ...current, [field]: e.target.value }))
                         }
-                        className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none"
+                        className="w-full rounded-xl border border-claude-border bg-claude-bg px-3 py-2 text-sm text-claude-text outline-none"
                       >
                         <option value="">Não mapear</option>
                         {headers.map((header) => (
@@ -786,11 +786,11 @@ export default function ImportarCsvClientPage({
           )}
         </div>
 
-        <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+        <div className="mt-8 rounded-3xl border border-claude-border bg-claude-surface p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-black tracking-tight">4. Preview e importação</h2>
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-claude-text-muted">
                 Veja o que será processado antes de enviar para a biblioteca e para o projeto.
               </p>
             </div>
@@ -799,7 +799,7 @@ export default function ImportarCsvClientPage({
               type="button"
               onClick={handleImport}
               disabled={processed.validRows.length === 0 || isPending}
-              className="rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl bg-claude-accent px-5 py-3 text-sm font-bold text-claude-bg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isPending
                 ? "Importando..."
@@ -808,13 +808,13 @@ export default function ImportarCsvClientPage({
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Linhas CSV</p>
+            <div className="rounded-2xl border border-claude-border bg-claude-surface/50 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-claude-text-muted">Linhas CSV</p>
               <p className="mt-2 text-3xl font-black">{rawRows.length}</p>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+            <div className="rounded-2xl border border-claude-border bg-claude-surface/50 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-claude-text-muted">
                 Linhas válidas
               </p>
               <p className="mt-2 text-3xl font-black text-emerald-400">
@@ -822,24 +822,24 @@ export default function ImportarCsvClientPage({
               </p>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Inválidas</p>
+            <div className="rounded-2xl border border-claude-border bg-claude-surface/50 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-claude-text-muted">Inválidas</p>
               <p className="mt-2 text-3xl font-black text-rose-400">{processed.invalidCount}</p>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+            <div className="rounded-2xl border border-claude-border bg-claude-surface/50 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-claude-text-muted">
                 Repetidas no CSV
               </p>
               <p className="mt-2 text-3xl font-black">{processed.duplicateCount}</p>
-              <p className="mt-1 text-[11px] leading-4 text-slate-500">
+              <p className="mt-1 text-[11px] leading-4 text-claude-text0">
                 Só informativo — todas serão enviadas mesmo assim.
               </p>
             </div>
           </div>
 
           {processed.energyScale === 100 && mapping.energy ? (
-            <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-3 text-xs text-cyan-100">
+            <div className="mt-4 rounded-xl border border-claude-accent/20 bg-claude-accent/10 p-3 text-xs text-claude-accent-hover">
               Energia detectada em escala 0–100 na coluna &quot;{mapping.energy}&quot;.
               Os valores foram convertidos automaticamente para a escala 1–10
               usada pelo MixBrain.
@@ -863,13 +863,13 @@ export default function ImportarCsvClientPage({
           ) : null}
 
           {processed.validRows.length === 0 ? (
-            <div className="mt-6 rounded-2xl border border-dashed border-white/10 p-6 text-center text-slate-400">
+            <div className="mt-6 rounded-2xl border border-dashed border-claude-border p-6 text-center text-claude-text-muted">
               Nenhuma linha pronta para importação.
             </div>
           ) : (
-            <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10">
+            <div className="mt-6 overflow-x-auto rounded-2xl border border-claude-border">
               <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-900/80 text-slate-300">
+                <thead className="bg-claude-surface-2/80 text-claude-text-muted">
                   <tr>
                     <th className="px-4 py-3">Title</th>
                     <th className="px-4 py-3">Artist</th>
@@ -884,7 +884,7 @@ export default function ImportarCsvClientPage({
                   {processed.previewRows.map((row, index) => (
                     <tr
                       key={`${row.title}-${row.artist ?? "sem-artista"}-${index}`}
-                      className="border-t border-white/10"
+                      className="border-t border-claude-border"
                     >
                       <td className="px-4 py-3">{row.title}</td>
                       <td className="px-4 py-3">{row.artist ?? "—"}</td>
@@ -901,7 +901,7 @@ export default function ImportarCsvClientPage({
           )}
 
           {processed.validRows.length > 10 ? (
-            <p className="mt-3 text-xs text-slate-400">
+            <p className="mt-3 text-xs text-claude-text-muted">
               Mostrando 10 de {processed.validRows.length} linhas prontas para importação.
             </p>
           ) : null}

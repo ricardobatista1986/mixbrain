@@ -63,7 +63,7 @@ export function ProjectCardActions({
         type="button"
         onClick={handleDuplicate}
         disabled={isPending}
-        className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 transition hover:border-cyan-300/50 hover:bg-cyan-300/10 disabled:opacity-60"
+        className="rounded-full border border-claude-border px-3 py-1.5 text-xs font-semibold text-claude-accent-hover transition hover:border-claude-accent/50 hover:bg-claude-accent/10 disabled:opacity-60"
       >
         Duplicar
       </button>
@@ -71,7 +71,7 @@ export function ProjectCardActions({
         type="button"
         onClick={handleToggleArchive}
         disabled={isPending}
-        className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-amber-300/50 hover:bg-amber-300/10 disabled:opacity-60"
+        className="rounded-full border border-claude-border px-3 py-1.5 text-xs font-semibold text-claude-text-muted transition hover:border-amber-300/50 hover:bg-amber-300/10 disabled:opacity-60"
       >
         {archived ? "Reativar" : "Arquivar"}
       </button>

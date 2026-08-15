@@ -95,14 +95,14 @@ export function OutlierCandidatesBox({
               type="button"
               onClick={handleRemoveAll}
               disabled={isPending}
-              className="rounded-lg bg-rose-400 px-3 py-1.5 text-xs font-bold text-slate-950 transition hover:bg-rose-300 disabled:opacity-60"
+              className="rounded-lg bg-rose-400 px-3 py-1.5 text-xs font-bold text-claude-bg transition hover:bg-rose-300 disabled:opacity-60"
             >
               {isPending ? "Removendo..." : `Confirmar remoção de ${candidates.length}`}
             </button>
             <button
               type="button"
               onClick={() => setConfirmingAll(false)}
-              className="text-xs text-slate-400 hover:text-slate-200"
+              className="text-xs text-claude-text-muted hover:text-claude-text"
             >
               Cancelar
             </button>
@@ -120,13 +120,13 @@ export function OutlierCandidatesBox({
         {candidates.map((candidate) => (
           <div
             key={candidate.candidateId}
-            className="flex items-center justify-between gap-3 rounded-xl border border-amber-300/15 bg-slate-950/40 p-3"
+            className="flex items-center justify-between gap-3 rounded-xl border border-amber-300/15 bg-claude-surface/40 p-3"
           >
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-100">
+              <p className="truncate text-sm font-semibold text-claude-text">
                 {candidate.title}
               </p>
-              <p className="truncate text-xs text-slate-400">{candidate.artist}</p>
+              <p className="truncate text-xs text-claude-text-muted">{candidate.artist}</p>
               <p className="mt-1 text-[11px] text-amber-300/80">{candidate.reason}</p>
             </div>
             <button

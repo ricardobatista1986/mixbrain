@@ -8,7 +8,7 @@ const scoreFactors = [
       "Verifica se a transição contribui para a história aprovada do set: abertura, construção, vale, pico, contemplação ou encerramento.",
     example:
       "Uma track mais hipnótica e escura pode fazer sentido antes de uma expansão de groove, mesmo que não tenha a maior energia.",
-    color: "border-cyan-300/30 bg-cyan-300/10 text-cyan-100",
+    color: "border-claude-accent/30 bg-claude-accent/10 text-claude-accent-hover",
   },
   {
     weight: "22%",
@@ -105,40 +105,40 @@ const rules = [
 
 export default function GlossarioPage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-white/10 bg-slate-950/90 backdrop-blur">
+    <main className="min-h-screen bg-claude-bg text-claude-text">
+      <header className="border-b border-claude-border bg-claude-bg/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5 sm:px-10 lg:px-12">
           <Link
             href="/"
             className="flex items-center gap-3 transition hover:opacity-80"
           >
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-300 font-black text-slate-950">
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-claude-accent font-black text-claude-bg">
               M
             </div>
             <div>
               <p className="font-bold tracking-tight">MixBrain</p>
-              <p className="text-xs text-slate-400">Glossário do produto</p>
+              <p className="text-xs text-claude-text-muted">Glossário do produto</p>
             </div>
           </Link>
 
           <Link
             href="/"
-            className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-300/50 hover:text-cyan-200"
+            className="rounded-full border border-claude-border px-4 py-2 text-sm font-medium text-claude-text-muted transition hover:border-claude-accent/50 hover:text-claude-accent-hover"
           >
             Voltar ao início
           </Link>
         </div>
       </header>
 
-      <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,_rgba(34,211,238,0.16),_transparent_40%)]">
+      <section className="border-b border-claude-border bg-[radial-gradient(circle_at_top_right,_rgba(34,211,238,0.16),_transparent_40%)]">
         <div className="mx-auto max-w-6xl px-6 py-16 sm:px-10 lg:px-12">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
             Transparência do modelo
           </p>
           <h1 className="mt-4 max-w-4xl text-4xl font-black tracking-tight sm:text-5xl">
             Como o MixBrain lê uma transição — e onde você continua decidindo.
           </h1>
-          <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-300">
+          <p className="mt-6 max-w-3xl text-lg leading-8 text-claude-text-muted">
             Esta página explica pesos, dimensões, alertas e regras operacionais.
             Ela será acessível de dentro de todas as telas que exibirem um score
             ou uma recomendação.
@@ -148,13 +148,13 @@ export default function GlossarioPage() {
 
       <section className="mx-auto max-w-6xl px-6 py-16 sm:px-10 lg:px-12">
         <div className="max-w-3xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
             Score de transição
           </p>
           <h2 className="mt-3 text-3xl font-black tracking-tight">
             O que forma uma recomendação
           </h2>
-          <p className="mt-4 leading-7 text-slate-400">
+          <p className="mt-4 leading-7 text-claude-text-muted">
             Para cada relação entre track A e track B, o sistema combina estes
             fatores. Os pesos abaixo são o padrão inicial e poderão ser ajustados
             por projeto no futuro.
@@ -169,12 +169,12 @@ export default function GlossarioPage() {
             >
               <div className="flex items-start justify-between gap-4">
                 <h3 className="text-xl font-bold">{factor.title}</h3>
-                <span className="rounded-full bg-slate-950/30 px-3 py-1 text-sm font-black">
+                <span className="rounded-full bg-claude-surface/30 px-3 py-1 text-sm font-black">
                   {factor.weight}
                 </span>
               </div>
               <p className="mt-4 leading-7 opacity-90">{factor.description}</p>
-              <div className="mt-5 rounded-xl bg-slate-950/25 p-4 text-sm leading-6">
+              <div className="mt-5 rounded-xl bg-claude-surface/25 p-4 text-sm leading-6">
                 <span className="font-bold">Exemplo: </span>
                 {factor.example}
               </div>
@@ -183,16 +183,16 @@ export default function GlossarioPage() {
         </div>
       </section>
 
-      <section className="border-y border-white/10 bg-slate-900/50">
+      <section className="border-y border-claude-border bg-claude-surface/50">
         <div className="mx-auto max-w-6xl px-6 py-16 sm:px-10 lg:px-12">
           <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
               Dimensões narrativas
             </p>
             <h2 className="mt-3 text-3xl font-black tracking-tight">
               Energia não é um único número.
             </h2>
-            <p className="mt-4 leading-7 text-slate-400">
+            <p className="mt-4 leading-7 text-claude-text-muted">
               O score geral continua útil, mas o MixBrain separa características
               que podem puxar uma track em direções diferentes.
             </p>
@@ -202,13 +202,13 @@ export default function GlossarioPage() {
             {dimensions.map(([name, description], index) => (
               <article
                 key={name}
-                className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
+                className="rounded-xl border border-claude-border bg-claude-surface p-4"
               >
-                <p className="text-xs font-black text-cyan-300">
+                <p className="text-xs font-black text-claude-accent">
                   {String(index + 1).padStart(2, "0")}
                 </p>
                 <h3 className="mt-3 font-bold">{name}</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-400">
+                <p className="mt-2 text-sm leading-6 text-claude-text-muted">
                   {description}
                 </p>
               </article>
@@ -219,7 +219,7 @@ export default function GlossarioPage() {
 
       <section className="mx-auto max-w-6xl px-6 py-16 sm:px-10 lg:px-12">
         <div className="max-w-3xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
             Regras operacionais
           </p>
           <h2 className="mt-3 text-3xl font-black tracking-tight">
@@ -231,21 +231,21 @@ export default function GlossarioPage() {
           {rules.map((rule, index) => (
             <article
               key={rule.title}
-              className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:grid-cols-[3rem_1fr] sm:p-6"
+              className="grid gap-4 rounded-2xl border border-claude-border bg-claude-surface p-5 sm:grid-cols-[3rem_1fr] sm:p-6"
             >
-              <p className="text-2xl font-black text-cyan-300">
+              <p className="text-2xl font-black text-claude-accent">
                 {String(index + 1).padStart(2, "0")}
               </p>
               <div>
                 <h3 className="text-lg font-bold">{rule.title}</h3>
-                <p className="mt-2 leading-7 text-slate-400">{rule.text}</p>
+                <p className="mt-2 leading-7 text-claude-text-muted">{rule.text}</p>
               </div>
             </article>
           ))}
         </div>
       </section>
 
-      <footer className="border-t border-white/10 px-6 py-8 text-center text-sm text-slate-500">
+      <footer className="border-t border-claude-border px-6 py-8 text-center text-sm text-claude-text0">
         MixBrain — curadoria narrativa, explicável e sob seu controle.
       </footer>
     </main>
