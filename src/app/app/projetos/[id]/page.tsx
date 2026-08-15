@@ -18,6 +18,7 @@ import { CurationTimeline, type CurationEventSummary } from "@/components/curati
 import { ScoringWeightsPanel } from "@/components/scoring-weights-panel";
 import { BridgeSuggestions, type BridgeSuggestionTrack } from "@/components/bridge-suggestions";
 import { EnergyArcChart, type EnergyPoint } from "@/components/energy-arc-chart";
+import { ProjectTabs } from "@/components/project-tabs";
 import { createClient } from "@/lib/supabase/server";
 import {
   approveCandidateToTracklist,
@@ -903,7 +904,14 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
       <section className="mx-auto max-w-7xl px-6 py-12 sm:px-10 lg:px-12">
         <MixBrainLegend />
 
-        <div className="grid gap-8 lg:grid-cols-2">
+        <ProjectTabs
+          tabs={[
+            {
+              key: "curadoria",
+              label: "Curadoria & Tracklist",
+              content: (
+                <>
+                  <div className="grid gap-8 lg:grid-cols-2">
           <section className="rounded-3xl border border-claude-border bg-claude-surface p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -941,8 +949,17 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
             <div className="mt-6 space-y-4">
               {fittingCandidates.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-claude-border p-6 text-center text-claude-text-muted">
-                  Sem candidatas na fila de aprovação.
+                <div className="rounded-2xl border border-dashed border-claude-border p-6 text-center">
+                  <p className="text-claude-text-muted">
+                    Sem candidatas na fila de aprovação ainda.
+                  </p>
+                  <p className="mt-2 text-sm text-claude-text-faint">
+                    Use a busca acima para adicionar da biblioteca, ou{" "}
+                    <Link href="/app/importar-csv" className="font-semibold text-claude-accent hover:underline">
+                      importe um CSV
+                    </Link>{" "}
+                    direto para este projeto.
+                  </p>
                 </div>
               ) : (
                 fittingCandidates.map((candidate) => {
@@ -1062,7 +1079,14 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
             <div className="mt-6 space-y-4">
               {groupedItems.length === 0 ? (
-                <div className="p-6 text-claude-text-muted">Nenhuma track aprovada.</div>
+                <div className="rounded-2xl border border-dashed border-claude-border p-6 text-center">
+                  <p className="text-claude-text-muted">Nenhuma track aprovada ainda.</p>
+                  <p className="mt-2 text-sm text-claude-text-faint">
+                    {pendingCandidates.length > 0
+                      ? `Você tem ${pendingCandidates.length} candidata(s) esperando. Aprove uma a uma ao lado, ou clique em "Gerar ordem automática" acima para o MixBrain montar a tracklist inteira de uma vez.`
+                      : "Adicione candidatas ao lado primeiro — depois é só aprovar manualmente ou gerar a ordem automática."}
+                  </p>
+                </div>
               ) : (
                 groupedItems.map((group, index) => {
                   const isFirst = index === 0;
@@ -1352,8 +1376,15 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
         <div className="mt-8">
           <EnergyArcChart points={energyPoints} />
         </div>
-
-        <div className="mt-8 grid gap-8 lg:grid-cols-2">
+                </>
+              ),
+            },
+            {
+              key: "config",
+              label: "Configurações & Histórico",
+              content: (
+                <>
+                  <div className="grid gap-8 lg:grid-cols-2">
           <ScoringWeightsPanel
             projectId={id}
             currentWeights={scoringWeights ?? {}}
@@ -1368,6 +1399,11 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             tracklistEmpty={groupedItems.length === 0}
           />
         </div>
+                </>
+              ),
+            },
+          ]}
+        />
       </section>
     </main>
   );

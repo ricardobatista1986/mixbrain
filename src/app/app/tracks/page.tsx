@@ -4,6 +4,7 @@ import { LogoutButton } from "@/components/logout-button";
 import { createClient } from "@/lib/supabase/server";
 import { CreateTrackForm } from "@/components/create-track-form";
 import { TracksLibrary } from "@/components/tracks-library";
+import { LibraryHealthPanel } from "@/components/library-health-panel";
 
 export default async function TracksPage() {
   const supabase = await createClient();
@@ -65,7 +66,10 @@ export default async function TracksPage() {
         </section>
 
         <div className="mt-10 grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
-          <CreateTrackForm />
+          <div className="flex flex-col gap-8">
+            <CreateTrackForm />
+            <LibraryHealthPanel tracks={tracks ?? []} />
+          </div>
           <TracksLibrary tracks={tracks ?? []} />
         </div>
       </div>
