@@ -51,33 +51,33 @@ async function ensureProjectOwnership(
   }
 }
 
+/**
+ * Reordena um conjunto de set_tracklist_items para as posições finais
+ * indicadas. Chama a função de banco reorder_tracklist_items, que faz a
+ * troca de posições (via posições negativas temporárias, necessário por
+ * causa do UNIQUE(project_id, position)) dentro de UMA ÚNICA transação —
+ * se qualquer parte falhar, o Postgres desfaz tudo automaticamente, nunca
+ * deixando a tracklist com posições negativas permanentes (bug real já
+ * visto em produção com a versão anterior, que fazia isso em múltiplas
+ * chamadas JS sequenciais e não-atômicas).
+ */
 async function applyNewOrder(
   supabase: SupabaseLike,
   projectId: string,
   newOrderArray: OrderUpdateItem[]
 ) {
-  for (const item of newOrderArray) {
-    const { error } = await supabase
-      .from("set_tracklist_items")
-      .update({ position: -item.newPosition })
-      .eq("id", item.id)
-      .eq("project_id", projectId);
+  const positions = newOrderArray.map((item) => ({
+    id: item.id,
+    position: item.newPosition,
+  }));
 
-    if (error) {
-      throw new Error(error.message);
-    }
-  }
+  const { error } = await supabase.rpc("reorder_tracklist_items", {
+    p_project_id: projectId,
+    p_positions: positions,
+  });
 
-  for (const item of newOrderArray) {
-    const { error } = await supabase
-      .from("set_tracklist_items")
-      .update({ position: item.newPosition })
-      .eq("id", item.id)
-      .eq("project_id", projectId);
-
-    if (error) {
-      throw new Error(error.message);
-    }
+  if (error) {
+    throw new Error(error.message);
   }
 }
 
@@ -865,42 +865,32 @@ export async function autoOrganizeTracklist(projectId: string) {
   const sequence = buildAutoSequence(units, scoringWeights);
   const flatMembers = sequence.flatMap((unit) => unit.members);
 
-  // Fase 1: joga todos os items existentes para posições negativas
-  // temporárias, liberando todo o espaço positivo de posição (que tem
-  // UNIQUE(project_id, position)) sem colidir com ninguém.
-  for (let i = 0; i < existingRows.length; i += 1) {
-    const { error } = await supabase
-      .from("set_tracklist_items")
-      .update({ position: -(i + 1) })
-      .eq("id", existingRows[i].id)
-      .eq("project_id", projectId);
+  const newTrackIds = flatMembers
+    .filter((member): member is { kind: "new"; trackId: string } => member.kind === "new")
+    .map((member) => member.trackId);
 
-    if (error) {
-      throw new Error(error.message);
-    }
-  }
+  const finalOrder = flatMembers.map((member) =>
+    member.kind === "existing"
+      ? { kind: "existing" as const, id: member.itemId }
+      : { kind: "new" as const, track_id: member.trackId }
+  );
 
-  // Fase 2: insere as candidatas aprovadas agora, direto na posição final.
-  // O espaço positivo está livre (fase 1), então não há colisão.
-  for (let i = 0; i < flatMembers.length; i += 1) {
-    const member = flatMembers[i];
+  // Uma única chamada atômica: insere as candidatas novas e reposiciona
+  // tudo (novas + existentes) numa transação só no banco. Se qualquer
+  // parte falhar, o Postgres desfaz tudo — nunca fica pela metade.
+  const { error: organizeError } = await supabase.rpc("auto_organize_tracklist", {
+    p_project_id: projectId,
+    p_new_track_ids: newTrackIds,
+    p_final_order: finalOrder,
+  });
 
-    if (member.kind === "new") {
-      const { error } = await supabase.from("set_tracklist_items").insert({
-        project_id: projectId,
-        track_id: member.trackId,
-        position: i + 1,
-      });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-    }
+  if (organizeError) {
+    throw new Error(organizeError.message);
   }
 
   revalidatePath(`/app/projetos/${projectId}`);
 
-  const newCount = flatMembers.filter((member) => member.kind === "new").length;
+  const newCount = newTrackIds.length;
   const blockCount = sequence.filter((unit) => unit.members.length > 1).length;
 
   return {
