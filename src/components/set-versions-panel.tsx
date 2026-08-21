@@ -160,7 +160,7 @@ export function SetVersionsPanel({
 
       <div className="mt-5 space-y-2">
         {versions.length === 0 ? (
-          <p className="text-sm text-claude-text0">Nenhuma versão salva ainda.</p>
+          <p className="text-sm text-claude-text-faint">Nenhuma versão salva ainda.</p>
         ) : (
           versions.map((version) => (
             <div
@@ -169,7 +169,7 @@ export function SetVersionsPanel({
             >
               <div>
                 <p className="text-sm font-semibold text-claude-text">{version.name}</p>
-                <p className="text-xs text-claude-text0">
+                <p className="text-xs text-claude-text-faint">
                   {formatDate(version.createdAt)} · {version.trackCount} track(s)
                 </p>
               </div>

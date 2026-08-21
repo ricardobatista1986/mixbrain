@@ -177,25 +177,44 @@ function getBpmFactor(currentTrack: ScoreTrack, nextTrack: ScoreTrack): ScoreFac
     };
   }
 
-  const percentageDifference =
+  const directDifference =
     (Math.abs(currentTrack.bpm - nextTrack.bpm) / currentTrack.bpm) * 100;
 
-  let score = 30;
-  let explanation = `Diferença de ${percentageDifference.toFixed(1)}% no BPM.`;
+  // Relação "mixável" de metade/dobro de tempo (comum em D&B/dubstep vs
+  // house/techno na mesma pista, ex. 174 vs 87 BPM): compara também contra
+  // o dobro e a metade do BPM da próxima track, não só o valor direto.
+  const halfDifference =
+    (Math.abs(currentTrack.bpm - nextTrack.bpm / 2) / currentTrack.bpm) * 100;
+  const doubleDifference =
+    (Math.abs(currentTrack.bpm - nextTrack.bpm * 2) / currentTrack.bpm) * 100;
 
-  if (percentageDifference === 0) {
+  const bestDifference = Math.min(directDifference, halfDifference, doubleDifference);
+  const isHalfDoubleRelation = bestDifference !== directDifference;
+
+  let score = 30;
+  let explanation = `Diferença de ${directDifference.toFixed(1)}% no BPM.`;
+
+  if (bestDifference === 0) {
     score = 100;
-    explanation = "Mesmo BPM.";
-  } else if (percentageDifference <= 0.8) {
+    explanation = isHalfDoubleRelation
+      ? "BPM exatamente na relação de metade/dobro (ex.: 174↔87) — mixável como tal."
+      : "Mesmo BPM.";
+  } else if (bestDifference <= 0.8) {
     score = 94;
-    explanation = "Variação de BPM praticamente imperceptível.";
-  } else if (percentageDifference <= 1.7) {
+    explanation = isHalfDoubleRelation
+      ? "Variação praticamente imperceptível na relação de metade/dobro de BPM."
+      : "Variação de BPM praticamente imperceptível.";
+  } else if (bestDifference <= 1.7) {
     score = 84;
-    explanation = "Variação de BPM pequena e normalmente mixável.";
-  } else if (percentageDifference <= 3.3) {
+    explanation = isHalfDoubleRelation
+      ? "Variação pequena na relação de metade/dobro de BPM — normalmente mixável."
+      : "Variação de BPM pequena e normalmente mixável.";
+  } else if (bestDifference <= 3.3) {
     score = 70;
-    explanation = "Mudança de BPM perceptível, mas ainda administrável.";
-  } else if (percentageDifference <= 5) {
+    explanation = isHalfDoubleRelation
+      ? "Relação de metade/dobro de BPM com variação perceptível, mas administrável."
+      : "Mudança de BPM perceptível, mas ainda administrável.";
+  } else if (bestDifference <= 5) {
     score = 55;
     explanation = "Mudança de BPM relevante: vale conferir a intenção da curva.";
   }

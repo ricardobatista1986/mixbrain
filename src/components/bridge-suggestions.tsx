@@ -61,7 +61,7 @@ export function BridgeSuggestions({
               <p className="truncate text-xs font-semibold text-claude-text">
                 {suggestion.artist} — {suggestion.title}
               </p>
-              <p className="text-[11px] text-claude-text0">
+              <p className="text-[11px] text-claude-text-faint">
                 {suggestion.bpm ? `${suggestion.bpm} BPM` : ""}{" "}
                 {suggestion.musical_key ?? ""} · encaixe médio {suggestion.score}%
               </p>

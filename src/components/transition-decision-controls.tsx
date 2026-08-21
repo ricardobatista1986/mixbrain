@@ -110,7 +110,7 @@ export function TransitionDecisionControls({
             onChange={(e) => setExplanation(e.target.value)}
             placeholder="Justificativa (opcional) — por que aprovar ou rejeitar essa transição"
             rows={2}
-            className="w-full rounded-lg border border-current/20 bg-claude-surface/40 px-3 py-2 text-xs text-claude-text outline-none placeholder:text-claude-text0"
+            className="w-full rounded-lg border border-current/20 bg-claude-surface/40 px-3 py-2 text-xs text-claude-text outline-none placeholder:text-claude-text-faint"
           />
           <div className="flex flex-wrap items-center gap-2">
             <button

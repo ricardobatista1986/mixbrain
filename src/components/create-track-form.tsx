@@ -182,7 +182,7 @@ export function CreateTrackForm() {
             {isPending ? "Salvando..." : "Cadastrar track"}
           </button>
 
-          <p className="text-sm text-claude-text0">
+          <p className="text-sm text-claude-text-faint">
             Esta track ficará disponível para seleção futura em projetos.
           </p>
         </div>

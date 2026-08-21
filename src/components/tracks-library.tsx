@@ -26,26 +26,6 @@ function formatBpm(value: number | null) {
   });
 }
 
-function matchesQuery(track: LibraryTrack, query: string) {
-  if (!query) return true;
-
-  const haystack = [
-    track.title,
-    track.artist,
-    track.musical_key,
-    track.mood,
-    track.source,
-    track.notes,
-    track.bpm !== null ? String(track.bpm) : "",
-    track.energy !== null ? String(track.energy) : "",
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLocaleLowerCase("pt-BR");
-
-  return haystack.includes(query.toLocaleLowerCase("pt-BR"));
-}
-
 function TrackEditForm({
   track,
   onDone,
@@ -78,17 +58,6 @@ function TrackEditForm({
     >
       <div className="grid gap-3 md:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-claude-text-muted">Título</span>
-          <input
-            type="text"
-            name="title"
-            required
-            maxLength={200}
-            defaultValue={track.title}
-            className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
-          />
-        </label>
-        <label className="block">
           <span className="mb-1 block text-xs font-medium text-claude-text-muted">Artista</span>
           <input
             type="text"
@@ -96,6 +65,17 @@ function TrackEditForm({
             required
             maxLength={200}
             defaultValue={track.artist}
+            className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-claude-text-muted">Título</span>
+          <input
+            type="text"
+            name="title"
+            required
+            maxLength={200}
+            defaultValue={track.title}
             className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
           />
         </label>
@@ -255,10 +235,24 @@ function DeleteTrackControl({ track }: { track: LibraryTrack }) {
   );
 }
 
+function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
+  const next = new Set(set);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  return next;
+}
+
 export function TracksLibrary({ tracks }: { tracks: LibraryTrack[] }) {
   const [query, setQuery] = useState("");
-  const [keyFilter, setKeyFilter] = useState("");
+  const [artistFilter, setArtistFilter] = useState("");
+  const [titleFilter, setTitleFilter] = useState("");
+  const [keyFilters, setKeyFilters] = useState<Set<string>>(new Set());
+  const [moodFilter, setMoodFilter] = useState("");
+  const [bpmMin, setBpmMin] = useState("");
+  const [bpmMax, setBpmMax] = useState("");
   const [energyMin, setEnergyMin] = useState("");
+  const [energyMax, setEnergyMax] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("recent");
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -270,13 +264,46 @@ export function TracksLibrary({ tracks }: { tracks: LibraryTrack[] }) {
     return [...keys].sort();
   }, [tracks]);
 
+  const availableMoods = useMemo(() => {
+    const moods = new Set<string>();
+    for (const track of tracks) {
+      if (track.mood) moods.add(track.mood);
+    }
+    return [...moods].sort();
+  }, [tracks]);
+
   const filtered = useMemo(() => {
-    const minEnergy = energyMin.trim() ? Number(energyMin) : null;
+    const min = bpmMin.trim() ? Number(bpmMin) : null;
+    const max = bpmMax.trim() ? Number(bpmMax) : null;
+    const eMin = energyMin.trim() ? Number(energyMin) : null;
+    const eMax = energyMax.trim() ? Number(energyMax) : null;
+    const q = query.trim().toLocaleLowerCase("pt-BR");
 
     const result = tracks
-      .filter((track) => matchesQuery(track, query))
-      .filter((track) => !keyFilter || track.musical_key === keyFilter)
-      .filter((track) => minEnergy === null || (track.energy ?? 0) >= minEnergy);
+      .filter((track) => {
+        if (!q) return true;
+        const haystack = [track.title, track.artist, track.musical_key, track.mood, track.notes]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase("pt-BR");
+        return haystack.includes(q);
+      })
+      .filter(
+        (track) =>
+          !artistFilter ||
+          track.artist.toLocaleLowerCase("pt-BR").includes(artistFilter.toLocaleLowerCase("pt-BR"))
+      )
+      .filter(
+        (track) =>
+          !titleFilter ||
+          track.title.toLocaleLowerCase("pt-BR").includes(titleFilter.toLocaleLowerCase("pt-BR"))
+      )
+      .filter((track) => keyFilters.size === 0 || (track.musical_key && keyFilters.has(track.musical_key)))
+      .filter((track) => !moodFilter || track.mood === moodFilter)
+      .filter((track) => min === null || (track.bpm !== null && track.bpm >= min))
+      .filter((track) => max === null || (track.bpm !== null && track.bpm <= max))
+      .filter((track) => eMin === null || (track.energy !== null && track.energy >= eMin))
+      .filter((track) => eMax === null || (track.energy !== null && track.energy <= eMax));
 
     const sorted = [...result];
     switch (sortKey) {
@@ -294,24 +321,57 @@ export function TracksLibrary({ tracks }: { tracks: LibraryTrack[] }) {
         break;
       case "recent":
       default:
-        sorted.sort((a, b) =>
-          (b.created_at ?? "").localeCompare(a.created_at ?? "")
-        );
+        sorted.sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
         break;
     }
 
     return sorted;
-  }, [tracks, query, keyFilter, energyMin, sortKey]);
+  }, [
+    tracks,
+    query,
+    artistFilter,
+    titleFilter,
+    keyFilters,
+    moodFilter,
+    bpmMin,
+    bpmMax,
+    energyMin,
+    energyMax,
+    sortKey,
+  ]);
+
+  const activeFilterCount =
+    (artistFilter ? 1 : 0) +
+    (titleFilter ? 1 : 0) +
+    keyFilters.size +
+    (moodFilter ? 1 : 0) +
+    (bpmMin || bpmMax ? 1 : 0) +
+    (energyMin || energyMax ? 1 : 0);
+
+  function clearFilters() {
+    setArtistFilter("");
+    setTitleFilter("");
+    setKeyFilters(new Set());
+    setMoodFilter("");
+    setBpmMin("");
+    setBpmMax("");
+    setEnergyMin("");
+    setEnergyMax("");
+  }
 
   return (
     <section className="flex h-full flex-col rounded-3xl border border-claude-border bg-claude-surface">
       <div className="border-b border-claude-border p-6">
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-claude-accent">
-          Catálogo atual
-        </p>
-        <h2 className="mt-2 text-2xl font-black tracking-tight text-claude-text">
-          {tracks.length} tracks cadastradas
-        </h2>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-claude-accent">
+              Catálogo atual
+            </p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-claude-text">
+              {tracks.length} tracks cadastradas
+            </h2>
+          </div>
+        </div>
 
         {tracks.length > 0 ? (
           <div className="mt-5 space-y-3">
@@ -323,7 +383,7 @@ export function TracksLibrary({ tracks }: { tracks: LibraryTrack[] }) {
               className="w-full rounded-xl border border-claude-border bg-claude-surface-2 px-4 py-2.5 text-sm text-claude-text outline-none transition placeholder:text-claude-text-faint focus:border-claude-accent"
             />
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <select
                 value={sortKey}
                 onChange={(e) => setSortKey(e.target.value as SortKey)}
@@ -336,31 +396,155 @@ export function TracksLibrary({ tracks }: { tracks: LibraryTrack[] }) {
                 <option value="energy">Energia (maior primeiro)</option>
               </select>
 
-              <select
-                value={keyFilter}
-                onChange={(e) => setKeyFilter(e.target.value)}
-                className="rounded-lg border border-claude-border bg-claude-surface-2 px-3 py-1.5 text-xs text-claude-text outline-none"
+              <button
+                type="button"
+                onClick={() => setShowFilters((v) => !v)}
+                className="rounded-lg border border-claude-border bg-claude-surface-2 px-3 py-1.5 text-xs font-semibold text-claude-text transition hover:border-claude-accent/50"
               >
-                <option value="">Todas as keys</option>
-                {availableKeys.map((key) => (
-                  <option key={key} value={key}>
-                    {key}
-                  </option>
-                ))}
-              </select>
+                Filtros {activeFilterCount > 0 ? `(${activeFilterCount})` : ""}{" "}
+                {showFilters ? "▲" : "▼"}
+              </button>
 
-              <input
-                type="number"
-                min={1}
-                max={10}
-                value={energyMin}
-                onChange={(e) => setEnergyMin(e.target.value)}
-                placeholder="Energia mín."
-                className="w-28 rounded-lg border border-claude-border bg-claude-surface-2 px-3 py-1.5 text-xs text-claude-text outline-none"
-              />
+              {activeFilterCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-xs text-claude-text-faint hover:text-claude-text"
+                >
+                  Limpar filtros
+                </button>
+              ) : null}
             </div>
 
-            {query || keyFilter || energyMin ? (
+            {showFilters ? (
+              <div className="grid gap-3 rounded-xl border border-claude-border bg-claude-surface-2 p-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-medium text-claude-text-faint">
+                    Artista contém
+                  </span>
+                  <input
+                    type="text"
+                    value={artistFilter}
+                    onChange={(e) => setArtistFilter(e.target.value)}
+                    className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-1.5 text-xs text-claude-text outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-medium text-claude-text-faint">
+                    Título contém
+                  </span>
+                  <input
+                    type="text"
+                    value={titleFilter}
+                    onChange={(e) => setTitleFilter(e.target.value)}
+                    className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-1.5 text-xs text-claude-text outline-none"
+                  />
+                </label>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-claude-text-faint">
+                      BPM mín.
+                    </span>
+                    <input
+                      type="number"
+                      value={bpmMin}
+                      onChange={(e) => setBpmMin(e.target.value)}
+                      className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-1.5 text-xs text-claude-text outline-none"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-claude-text-faint">
+                      BPM máx.
+                    </span>
+                    <input
+                      type="number"
+                      value={bpmMax}
+                      onChange={(e) => setBpmMax(e.target.value)}
+                      className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-1.5 text-xs text-claude-text outline-none"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-claude-text-faint">
+                      Energia mín.
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={energyMin}
+                      onChange={(e) => setEnergyMin(e.target.value)}
+                      className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-1.5 text-xs text-claude-text outline-none"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-claude-text-faint">
+                      Energia máx.
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={energyMax}
+                      onChange={(e) => setEnergyMax(e.target.value)}
+                      className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-1.5 text-xs text-claude-text outline-none"
+                    />
+                  </label>
+                </div>
+
+                {availableMoods.length > 0 ? (
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-claude-text-faint">
+                      Mood
+                    </span>
+                    <select
+                      value={moodFilter}
+                      onChange={(e) => setMoodFilter(e.target.value)}
+                      className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-1.5 text-xs text-claude-text outline-none"
+                    >
+                      <option value="">Todos</option>
+                      {availableMoods.map((mood) => (
+                        <option key={mood} value={mood}>
+                          {mood}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
+                {availableKeys.length > 0 ? (
+                  <div className="sm:col-span-2">
+                    <span className="mb-1 block text-[11px] font-medium text-claude-text-faint">
+                      Key (pode marcar mais de uma)
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {availableKeys.map((key) => {
+                        const active = keyFilters.has(key);
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setKeyFilters((current) => toggleInSet(current, key))}
+                            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                              active
+                                ? "border-claude-accent bg-claude-accent/15 text-claude-accent"
+                                : "border-claude-border text-claude-text-muted hover:border-claude-accent/40"
+                            }`}
+                          >
+                            {key}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {query || activeFilterCount > 0 ? (
               <p className="text-xs text-claude-text-faint">
                 {filtered.length} de {tracks.length} tracks correspondem ao filtro.
               </p>
@@ -382,58 +566,78 @@ export function TracksLibrary({ tracks }: { tracks: LibraryTrack[] }) {
         <div className="p-6">
           <div className="rounded-2xl border border-dashed border-claude-border bg-claude-surface-2 p-6">
             <p className="text-sm leading-7 text-claude-text-muted">
-              Nenhuma track corresponde à busca &quot;{query}&quot;.
+              Nenhuma track corresponde ao filtro atual.
             </p>
           </div>
         </div>
       ) : (
-        <div className="max-h-[640px] flex-1 overflow-y-auto">
-          {filtered.map((track, index) => (
-            <div key={track.id} className="border-b border-claude-border last:border-b-0">
-              <div
-                onClick={() =>
-                  setEditingId((current) => (current === track.id ? null : track.id))
-                }
-                className="flex cursor-pointer items-center gap-4 px-6 py-3 transition hover:bg-claude-surface-2"
-              >
-                <span className="w-5 shrink-0 text-right text-xs text-claude-text-faint">
-                  {index + 1}
-                </span>
+        <>
+          <div className="hidden items-center gap-4 border-b border-claude-border px-6 py-2 text-[11px] font-bold uppercase tracking-wider text-claude-text-faint sm:flex">
+            <span className="w-5 shrink-0" />
+            <span className="w-40 shrink-0">Artista</span>
+            <span className="min-w-0 flex-1">Título</span>
+            <span className="w-16 shrink-0 text-right">BPM</span>
+            <span className="w-10 shrink-0">Key</span>
+            <span className="w-16 shrink-0">Energia</span>
+            <span className="w-32 shrink-0">Mood</span>
+            <span className="w-32 shrink-0" />
+          </div>
 
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-claude-text">
+          <div className="max-h-[600px] flex-1 overflow-y-auto">
+            {filtered.map((track, index) => (
+              <div key={track.id} className="border-b border-claude-border last:border-b-0">
+                <div
+                  onClick={() =>
+                    setEditingId((current) => (current === track.id ? null : track.id))
+                  }
+                  className="flex cursor-pointer items-center gap-4 px-6 py-3 transition hover:bg-claude-surface-2"
+                >
+                  <span className="w-5 shrink-0 text-right text-xs text-claude-text-faint">
+                    {index + 1}
+                  </span>
+
+                  <span className="w-40 shrink-0 truncate text-sm font-semibold text-claude-text">
+                    {track.artist}
+                  </span>
+
+                  <span className="min-w-0 flex-1 truncate text-sm text-claude-text-muted">
                     {track.title}
-                  </p>
-                  <p className="truncate text-xs text-claude-text-muted">{track.artist}</p>
-                </div>
-
-                <div className="hidden shrink-0 items-center gap-4 text-xs text-claude-text-muted sm:flex">
-                  <span className="w-16 text-right">{formatBpm(track.bpm)} BPM</span>
-                  <span className="w-10">{track.musical_key ?? "—"}</span>
-                  <span className="w-16">
-                    {track.energy ? `Energia ${track.energy}/10` : "—"}
                   </span>
-                  {track.mood ? (
-                    <span className="max-w-[140px] truncate rounded-full border border-claude-accent/20 bg-claude-accent/10 px-2 py-0.5 text-claude-accent">
-                      {track.mood}
+
+                  <span className="hidden w-16 shrink-0 text-right text-xs text-claude-text-muted sm:block">
+                    {formatBpm(track.bpm)}
+                  </span>
+                  <span className="hidden w-10 shrink-0 text-xs text-claude-text-muted sm:block">
+                    {track.musical_key ?? "—"}
+                  </span>
+                  <span className="hidden w-16 shrink-0 text-xs text-claude-text-muted sm:block">
+                    {track.energy ? `${track.energy}/10` : "—"}
+                  </span>
+                  <span className="hidden w-32 shrink-0 truncate text-xs sm:block">
+                    {track.mood ? (
+                      <span className="rounded-full border border-claude-accent/20 bg-claude-accent/10 px-2 py-0.5 text-claude-accent">
+                        {track.mood}
+                      </span>
+                    ) : (
+                      <span className="text-claude-text-faint">—</span>
+                    )}
+                  </span>
+
+                  <span className="flex w-32 shrink-0 items-center justify-end gap-3">
+                    <span className="text-xs font-semibold text-claude-accent">
+                      {editingId === track.id ? "Fechar" : "Editar"}
                     </span>
-                  ) : null}
-                </div>
-
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className="text-xs font-semibold text-claude-accent">
-                    {editingId === track.id ? "Fechar" : "Editar"}
+                    <DeleteTrackControl track={track} />
                   </span>
-                  <DeleteTrackControl track={track} />
                 </div>
-              </div>
 
-              {editingId === track.id ? (
-                <TrackEditForm track={track} onDone={() => setEditingId(null)} />
-              ) : null}
-            </div>
-          ))}
-        </div>
+                {editingId === track.id ? (
+                  <TrackEditForm track={track} onDone={() => setEditingId(null)} />
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </section>
   );

@@ -102,7 +102,7 @@ export function ScoringWeightsPanel({
         ))}
       </div>
 
-      <p className="mt-3 text-xs text-claude-text0">Soma atual: {total}</p>
+      <p className="mt-3 text-xs text-claude-text-faint">Soma atual: {total}</p>
 
       {message ? (
         <p className="mt-3 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-100">

@@ -245,7 +245,7 @@ export default function GlossarioPage() {
         </div>
       </section>
 
-      <footer className="border-t border-claude-border px-6 py-8 text-center text-sm text-claude-text0">
+      <footer className="border-t border-claude-border px-6 py-8 text-center text-sm text-claude-text-faint">
         MixBrain — curadoria narrativa, explicável e sob seu controle.
       </footer>
     </main>

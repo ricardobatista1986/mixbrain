@@ -114,7 +114,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-7 text-center text-xs leading-5 text-claude-text0">
+        <p className="mt-7 text-center text-xs leading-5 text-claude-text-faint">
           Este ambiente é privado. Novas contas não podem ser criadas pela
           página de login.
         </p>

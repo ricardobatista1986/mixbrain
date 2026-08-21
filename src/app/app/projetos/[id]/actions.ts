@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   buildAutoSequence,
   type SequenceUnit,
+  type TargetEnergyCurve,
 } from "@/lib/mixbrain/auto-sequence";
 import type {
   CuratorialMoment,
@@ -730,11 +731,12 @@ export async function autoOrganizeTracklist(projectId: string) {
 
   const { data: projectRow } = await supabase
     .from("set_projects")
-    .select("scoring_weights")
+    .select("scoring_weights, target_energy_curve")
     .eq("id", projectId)
     .single();
 
   const scoringWeights = normalizeScoringWeights(projectRow?.scoring_weights);
+  const targetEnergyCurve = normalizeTargetEnergyCurve(projectRow?.target_energy_curve);
 
   const { data: existingItemsRaw, error: itemsError } = await supabase
     .from("set_tracklist_items")
@@ -862,7 +864,7 @@ export async function autoOrganizeTracklist(projectId: string) {
     );
   }
 
-  const sequence = buildAutoSequence(units, scoringWeights);
+  const sequence = buildAutoSequence(units, scoringWeights, targetEnergyCurve);
   const flatMembers = sequence.flatMap((unit) => unit.members);
 
   const newTrackIds = flatMembers
@@ -1282,6 +1284,59 @@ export async function reorderTracklist(
   }));
 
   await applyNewOrder(supabase, projectId, newOrderArray);
+
+  revalidatePath(`/app/projetos/${projectId}`);
+}
+
+function normalizeTargetEnergyCurve(raw: unknown): TargetEnergyCurve | undefined {
+  if (!Array.isArray(raw) || raw.length !== 5) return undefined;
+
+  const parsed = raw.map((value) =>
+    typeof value === "number" && Number.isFinite(value) ? value : null
+  ) as TargetEnergyCurve;
+
+  if (parsed.every((value) => value === null)) return undefined;
+
+  return parsed;
+}
+
+export async function updateTargetEnergyCurve(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
+  const projectId = String(formData.get("project_id") || "");
+
+  if (!projectId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const checkpointKeys = ["p0", "p25", "p50", "p75", "p100"] as const;
+  const curve: (number | null)[] = [];
+
+  for (const key of checkpointKeys) {
+    const raw = formData.get(key);
+    if (typeof raw !== "string" || raw.trim() === "") {
+      curve.push(null);
+      continue;
+    }
+
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 1 || value > 10) {
+      throw new Error("Cada ponto da curva deve ser um número entre 1 e 10, ou em branco.");
+    }
+    curve.push(value);
+  }
+
+  const { error } = await supabase
+    .from("set_projects")
+    .update({ target_energy_curve: curve.every((v) => v === null) ? null : curve })
+    .eq("id", projectId)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 
   revalidatePath(`/app/projetos/${projectId}`);
 }

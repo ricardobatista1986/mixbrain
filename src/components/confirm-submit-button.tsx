@@ -33,7 +33,7 @@ export function ConfirmSubmitButton({
         <button
           type="button"
           onClick={() => setConfirming(false)}
-          className="text-xs text-claude-text0 hover:text-claude-text-muted"
+          className="text-xs text-claude-text-faint hover:text-claude-text-muted"
         >
           Cancelar
         </button>

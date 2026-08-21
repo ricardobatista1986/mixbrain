@@ -163,7 +163,7 @@ export function EditProjectForm({ project }: EditProjectFormProps) {
             {isPending ? "Salvando..." : "Salvar alterações"}
           </button>
 
-          <p className="text-sm text-claude-text0">
+          <p className="text-sm text-claude-text-faint">
             As mudanças são gravadas diretamente no projeto atual.
           </p>
         </div>

@@ -16,6 +16,7 @@ import {
 } from "@/components/transition-decision-controls";
 import { CurationTimeline, type CurationEventSummary } from "@/components/curation-timeline";
 import { ScoringWeightsPanel } from "@/components/scoring-weights-panel";
+import { EnergyCurveEditor } from "@/components/energy-curve-editor";
 import { BridgeSuggestions, type BridgeSuggestionTrack } from "@/components/bridge-suggestions";
 import { EnergyArcChart, type EnergyPoint } from "@/components/energy-arc-chart";
 import { ProjectTabs } from "@/components/project-tabs";
@@ -1171,7 +1172,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                 <article className="rounded-xl border border-claude-border/60 bg-claude-surface/50 p-4">
                                   <div className="flex min-w-0 flex-col gap-4">
                                     <div className="flex min-w-0 items-start gap-4">
-                                      <div className="w-6 shrink-0 text-sm font-bold text-claude-text0">
+                                      <div className="w-6 shrink-0 text-sm font-bold text-claude-text-faint">
                                         {item.position}
                                       </div>
 
@@ -1390,6 +1391,17 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             currentWeights={scoringWeights ?? {}}
           />
           <CurationTimeline events={curationEvents} />
+        </div>
+
+        <div className="mt-8">
+          <EnergyCurveEditor
+            projectId={id}
+            currentCurve={
+              Array.isArray(project.target_energy_curve)
+                ? (project.target_energy_curve as (number | null)[])
+                : null
+            }
+          />
         </div>
 
         <div className="mt-8">

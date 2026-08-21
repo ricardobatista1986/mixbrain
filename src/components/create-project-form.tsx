@@ -97,7 +97,7 @@ export function CreateProjectForm() {
             {isPending ? "Criando..." : "Criar projeto"}
           </button>
 
-          <p className="text-sm text-claude-text0">
+          <p className="text-sm text-claude-text-faint">
             O projeto será salvo diretamente no seu Supabase privado.
           </p>
         </div>

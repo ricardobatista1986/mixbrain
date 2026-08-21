@@ -61,7 +61,7 @@ export function CurationTimeline({ events }: { events: CurationEventSummary[] })
         <h2 className="mt-2 text-2xl font-black tracking-tight">
           Histórico de curadoria
         </h2>
-        <p className="mt-4 text-sm text-claude-text0">
+        <p className="mt-4 text-sm text-claude-text-faint">
           Nenhum evento registrado ainda. Aprovar candidatas, congelar blocos,
           aprovar/rejeitar transições e salvar versões passam a aparecer aqui.
         </p>
@@ -97,7 +97,7 @@ export function CurationTimeline({ events }: { events: CurationEventSummary[] })
                   {detail ? <span className="font-normal text-claude-text-muted"> — {detail}</span> : null}
                 </p>
               </div>
-              <span className="shrink-0 text-[11px] text-claude-text0">
+              <span className="shrink-0 text-[11px] text-claude-text-faint">
                 {formatDate(event.createdAt)}
               </span>
             </div>

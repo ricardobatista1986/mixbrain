@@ -701,7 +701,7 @@ export default function ImportarCsvClientPage({
           </p>
 
           {headers.length > 0 ? (
-            <p className="mt-3 text-xs text-claude-text0">
+            <p className="mt-3 text-xs text-claude-text-faint">
               Cabeçalhos detectados no arquivo: {headers.join(", ")}
             </p>
           ) : null}
@@ -832,7 +832,7 @@ export default function ImportarCsvClientPage({
                 Repetidas no CSV
               </p>
               <p className="mt-2 text-3xl font-black">{processed.duplicateCount}</p>
-              <p className="mt-1 text-[11px] leading-4 text-claude-text0">
+              <p className="mt-1 text-[11px] leading-4 text-claude-text-faint">
                 Só informativo — todas serão enviadas mesmo assim.
               </p>
             </div>
