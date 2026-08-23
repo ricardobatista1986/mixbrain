@@ -115,7 +115,7 @@ export function LibrarySuggestions({
         </p>
       ) : null}
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      <div className="mt-4 divide-y divide-claude-border overflow-hidden rounded-xl border border-claude-border">
         {orderedSuggestions.map((suggestion) => {
           const label = scoreLabel(suggestion.score);
           const isSelected = selected.has(suggestion.id);
@@ -123,35 +123,42 @@ export function LibrarySuggestions({
           return (
             <label
               key={suggestion.id}
-              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
-                isSelected
-                  ? "border-emerald-300/60 bg-emerald-300/10"
-                  : "border-claude-border bg-claude-surface/50 hover:border-emerald-300/30"
+              className={`flex cursor-pointer items-center gap-4 px-4 py-3 transition ${
+                isSelected ? "bg-emerald-300/10" : "bg-claude-surface/40 hover:bg-claude-surface/70"
               }`}
             >
               <input
                 type="checkbox"
                 checked={isSelected}
                 onChange={() => toggle(suggestion.id)}
-                className="mt-1 h-4 w-4 rounded border-claude-border bg-claude-surface"
+                className="h-4 w-4 shrink-0 rounded border-claude-border bg-claude-surface"
               />
+
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-claude-text">
                   {suggestion.title}
                 </p>
                 <p className="truncate text-xs text-claude-text-muted">{suggestion.artist}</p>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-claude-text-muted">
-                  <span>{suggestion.bpm ? `${suggestion.bpm} BPM` : "BPM —"}</span>
-                  <span>{suggestion.musical_key ?? "Key —"}</span>
-                  <span>{suggestion.energy ? `E${suggestion.energy}` : "E —"}</span>
-                  {label ? (
-                    <span className={`font-bold ${label.tone}`}>
-                      {label.text}
-                      {suggestion.score !== null ? ` (${suggestion.score}%)` : ""}
-                    </span>
-                  ) : null}
-                </div>
               </div>
+
+              <div className="hidden shrink-0 items-center gap-3 text-[11px] text-claude-text-muted sm:flex">
+                <span className="w-16 text-right">
+                  {suggestion.bpm ? `${suggestion.bpm} BPM` : "BPM —"}
+                </span>
+                <span className="w-10">{suggestion.musical_key ?? "Key —"}</span>
+                <span className="w-8">{suggestion.energy ? `E${suggestion.energy}` : "E —"}</span>
+              </div>
+
+              {label ? (
+                <span
+                  className={`w-16 shrink-0 text-right text-xs font-bold ${label.tone}`}
+                  title={label.text}
+                >
+                  {suggestion.score !== null ? `${suggestion.score}%` : "—"}
+                </span>
+              ) : (
+                <span className="w-16 shrink-0" />
+              )}
             </label>
           );
         })}
