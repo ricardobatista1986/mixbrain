@@ -20,6 +20,7 @@ import { EnergyCurveEditor } from "@/components/energy-curve-editor";
 import { BridgeSuggestions, type BridgeSuggestionTrack } from "@/components/bridge-suggestions";
 import { EnergyArcChart, type EnergyPoint } from "@/components/energy-arc-chart";
 import { ProjectTabs } from "@/components/project-tabs";
+import { TracklistDragList } from "@/components/tracklist-drag-list";
 import { createClient } from "@/lib/supabase/server";
 import {
   approveCandidateToTracklist,
@@ -1089,12 +1090,18 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                   </p>
                 </div>
               ) : (
-                groupedItems.map((group, index) => {
+                <TracklistDragList
+                  projectId={id}
+                  items={groupedItems
+                    .map((group, index) => {
                   const isFirst = index === 0;
                   const isLast = index === groupedItems.length - 1;
 
                   if (group.isBlock) {
-                    return (
+                    return {
+                      id: `block-${group.block_id}`,
+                      memberIds: group.items.map((item) => item.id),
+                      node: (
                       <div
                         key={`block-${group.block_id}`}
                         className="rounded-2xl border-2 border-indigo-500/30 bg-indigo-500/[0.03] p-2 sm:p-4"
@@ -1231,7 +1238,8 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                           })}
                         </div>
                       </div>
-                    );
+                      ),
+                    };
                   }
 
                   const track = getTrackFromRelation(group.item.tracks);
@@ -1257,7 +1265,10 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                     scoringWeights
                   );
 
-                  return (
+                  return {
+                    id: group.item.id,
+                    memberIds: [group.item.id],
+                    node: (
                     <div key={group.item.id} className="space-y-2">
                       <article className="rounded-2xl border border-claude-accent/20 bg-claude-accent/[0.03] p-4">
                         <div className="flex min-w-0 flex-col gap-4">
@@ -1367,8 +1378,11 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                         }
                       />
                     </div>
-                  );
+                    ),
+                  };
                 })
+                .filter((dragItem): dragItem is NonNullable<typeof dragItem> => dragItem !== null)}
+                />
               )}
             </div>
           </section>
