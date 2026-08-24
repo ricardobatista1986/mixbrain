@@ -1176,40 +1176,53 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
                             return (
                               <div key={item.id} className="space-y-2">
-                                <article className="rounded-xl border border-claude-border/60 bg-claude-surface/50 p-4">
-                                  <div className="flex min-w-0 flex-col gap-4">
-                                    <div className="flex min-w-0 items-start gap-4">
-                                      <div className="w-6 shrink-0 text-sm font-bold text-claude-text-faint">
-                                        {item.position}
-                                      </div>
+                                <article className="rounded-lg border border-claude-border/60 bg-claude-surface/50 px-3 py-2">
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <span className="w-6 shrink-0 text-sm font-bold text-claude-text-faint">
+                                      {item.position}
+                                    </span>
 
-                                      <div className="min-w-0 flex-1">
-                                        <p className="break-words font-bold text-claude-text">
-                                          {track.title}
-                                        </p>
-                                        <p className="break-words text-xs text-claude-text-muted">
-                                          {track.artist || "Artista não informado"}
-                                        </p>
-
-                                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-claude-text-muted">
-                                          <span className="rounded-full border border-claude-border px-3 py-1">
-                                            BPM: {track.bpm ?? "—"}
-                                          </span>
-                                          <span className="rounded-full border border-claude-border px-3 py-1">
-                                            Key: {track.musical_key ?? "—"}
-                                          </span>
-                                          <span className="rounded-full border border-claude-border px-3 py-1">
-                                            Energia: {track.energy ?? "—"}
-                                          </span>
-                                          <span className="rounded-full border border-claude-border px-3 py-1">
-                                            Mood: {track.mood ?? "—"}
-                                          </span>
-                                        </div>
-                                      </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-sm font-bold text-claude-text">
+                                        {track.title}
+                                      </p>
+                                      <p className="truncate text-xs text-claude-text-muted">
+                                        {track.artist || "Artista não informado"}
+                                      </p>
                                     </div>
 
-                                    <CuratorialEditor projectId={id} item={item} />
+                                    <div className="hidden shrink-0 items-center gap-3 text-[11px] text-claude-text-muted md:flex">
+                                      <span className="w-16 text-right">
+                                        {track.bpm ? `${track.bpm} BPM` : "BPM —"}
+                                      </span>
+                                      <span className="w-10">{track.musical_key ?? "Key —"}</span>
+                                      <span className="w-8">
+                                        {track.energy ? `E${track.energy}` : "E —"}
+                                      </span>
+                                      <span className="w-24 truncate">{track.mood ?? "—"}</span>
+                                    </div>
                                   </div>
+
+                                  <details className="mt-2">
+                                    <summary className="cursor-pointer text-[11px] font-semibold text-claude-text-faint hover:text-claude-text-muted">
+                                      Detalhes e momento no set
+                                    </summary>
+                                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-claude-text-muted md:hidden">
+                                      <span className="rounded-full border border-claude-border px-3 py-1">
+                                        BPM: {track.bpm ?? "—"}
+                                      </span>
+                                      <span className="rounded-full border border-claude-border px-3 py-1">
+                                        Key: {track.musical_key ?? "—"}
+                                      </span>
+                                      <span className="rounded-full border border-claude-border px-3 py-1">
+                                        Energia: {track.energy ?? "—"}
+                                      </span>
+                                      <span className="rounded-full border border-claude-border px-3 py-1">
+                                        Mood: {track.mood ?? "—"}
+                                      </span>
+                                    </div>
+                                    <CuratorialEditor projectId={id} item={item} />
+                                  </details>
                                 </article>
 
                                 <TransitionScoreCard
@@ -1270,90 +1283,97 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                     memberIds: [group.item.id],
                     node: (
                     <div key={group.item.id} className="space-y-2">
-                      <article className="rounded-2xl border border-claude-accent/20 bg-claude-accent/[0.03] p-4">
-                        <div className="flex min-w-0 flex-col gap-4">
-                          <div className="flex min-w-0 items-start gap-4">
-                            <div className="mt-1 shrink-0">
-                              <input
-                                form="create-block-form"
-                                type="checkbox"
-                                name="selected_items"
-                                value={group.item.id}
-                                className="h-5 w-5 rounded border-claude-border bg-claude-surface"
-                              />
-                            </div>
+                      <article className="rounded-xl border border-claude-accent/20 bg-claude-accent/[0.03] px-4 py-3">
+                        <div className="flex min-w-0 flex-wrap items-center gap-3">
+                          <input
+                            form="create-block-form"
+                            type="checkbox"
+                            name="selected_items"
+                            value={group.item.id}
+                            className="h-4 w-4 shrink-0 rounded border-claude-border bg-claude-surface"
+                          />
 
-                            <div className="w-6 shrink-0 pt-0.5 text-sm font-bold text-claude-accent">
-                              {group.item.position}
-                            </div>
+                          <span className="w-6 shrink-0 text-sm font-bold text-claude-accent">
+                            {group.item.position}
+                          </span>
 
-                            <div className="min-w-0 flex-1">
-                              <h3 className="break-words font-bold">
-                                {track.title}
-                              </h3>
-                              <p className="break-words text-xs text-claude-text-muted">
-                                {track.artist || "Artista não informado"}
-                              </p>
-
-                              <div className="mt-3 flex flex-wrap gap-2 text-xs text-claude-text-muted">
-                                <span className="rounded-full border border-claude-border px-3 py-1">
-                                  BPM: {track.bpm ?? "—"}
-                                </span>
-                                <span className="rounded-full border border-claude-border px-3 py-1">
-                                  Key: {track.musical_key ?? "—"}
-                                </span>
-                                <span className="rounded-full border border-claude-border px-3 py-1">
-                                  Energia: {track.energy ?? "—"}
-                                </span>
-                                <span className="rounded-full border border-claude-border px-3 py-1">
-                                  Mood: {track.mood ?? "—"}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex shrink-0 flex-col items-end gap-2">
-                              <div className="flex gap-2">
-                                <form action={moveEntityUp}>
-                                  <input type="hidden" name="project_id" value={id} />
-                                  <input type="hidden" name="entity_id" value={group.item.id} />
-                                  <input type="hidden" name="is_block" value="false" />
-                                  <button
-                                    type="submit"
-                                    disabled={isFirst}
-                                    className="rounded-lg border border-claude-border px-2 py-1 text-claude-text-muted transition hover:text-white disabled:opacity-30"
-                                  >
-                                    ⬆️
-                                  </button>
-                                </form>
-
-                                <form action={moveEntityDown}>
-                                  <input type="hidden" name="project_id" value={id} />
-                                  <input type="hidden" name="entity_id" value={group.item.id} />
-                                  <input type="hidden" name="is_block" value="false" />
-                                  <button
-                                    type="submit"
-                                    disabled={isLast}
-                                    className="rounded-lg border border-claude-border px-2 py-1 text-claude-text-muted transition hover:text-white disabled:opacity-30"
-                                  >
-                                    ⬇️
-                                  </button>
-                                </form>
-                              </div>
-
-                              <form action={removeFromTracklist}>
-                                <input type="hidden" name="project_id" value={id} />
-                                <input
-                                  type="hidden"
-                                  name="tracklist_item_id"
-                                  value={group.item.id}
-                                />
-                                <ConfirmSubmitButton>Remover</ConfirmSubmitButton>
-                              </form>
-                            </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold">{track.title}</p>
+                            <p className="truncate text-xs text-claude-text-muted">
+                              {track.artist || "Artista não informado"}
+                            </p>
                           </div>
 
-                          <CuratorialEditor projectId={id} item={group.item} />
+                          <div className="hidden shrink-0 items-center gap-3 text-[11px] text-claude-text-muted md:flex">
+                            <span className="w-16 text-right">
+                              {track.bpm ? `${track.bpm} BPM` : "BPM —"}
+                            </span>
+                            <span className="w-10">{track.musical_key ?? "Key —"}</span>
+                            <span className="w-8">
+                              {track.energy ? `E${track.energy}` : "E —"}
+                            </span>
+                            <span className="w-24 truncate">{track.mood ?? "—"}</span>
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <form action={moveEntityUp}>
+                              <input type="hidden" name="project_id" value={id} />
+                              <input type="hidden" name="entity_id" value={group.item.id} />
+                              <input type="hidden" name="is_block" value="false" />
+                              <button
+                                type="submit"
+                                disabled={isFirst}
+                                className="rounded-lg border border-claude-border px-2 py-1 text-claude-text-muted transition hover:text-white disabled:opacity-30"
+                              >
+                                ⬆️
+                              </button>
+                            </form>
+
+                            <form action={moveEntityDown}>
+                              <input type="hidden" name="project_id" value={id} />
+                              <input type="hidden" name="entity_id" value={group.item.id} />
+                              <input type="hidden" name="is_block" value="false" />
+                              <button
+                                type="submit"
+                                disabled={isLast}
+                                className="rounded-lg border border-claude-border px-2 py-1 text-claude-text-muted transition hover:text-white disabled:opacity-30"
+                              >
+                                ⬇️
+                              </button>
+                            </form>
+
+                            <form action={removeFromTracklist}>
+                              <input type="hidden" name="project_id" value={id} />
+                              <input
+                                type="hidden"
+                                name="tracklist_item_id"
+                                value={group.item.id}
+                              />
+                              <ConfirmSubmitButton>Remover</ConfirmSubmitButton>
+                            </form>
+                          </div>
                         </div>
+
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-[11px] font-semibold text-claude-text-faint hover:text-claude-text-muted">
+                            Detalhes e momento no set
+                          </summary>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-claude-text-muted md:hidden">
+                            <span className="rounded-full border border-claude-border px-3 py-1">
+                              BPM: {track.bpm ?? "—"}
+                            </span>
+                            <span className="rounded-full border border-claude-border px-3 py-1">
+                              Key: {track.musical_key ?? "—"}
+                            </span>
+                            <span className="rounded-full border border-claude-border px-3 py-1">
+                              Energia: {track.energy ?? "—"}
+                            </span>
+                            <span className="rounded-full border border-claude-border px-3 py-1">
+                              Mood: {track.mood ?? "—"}
+                            </span>
+                          </div>
+                          <CuratorialEditor projectId={id} item={group.item} />
+                        </details>
                       </article>
 
                       <TransitionScoreCard
