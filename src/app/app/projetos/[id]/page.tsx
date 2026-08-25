@@ -838,7 +838,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               Workspace
             </Link>
             <Link
-              href="/app/glossario"
+              href={`/app/glossario?projeto=${id}`}
               className="rounded-full border border-claude-border px-4 py-2 text-sm font-medium text-claude-text-muted transition hover:border-claude-accent/50 hover:text-claude-accent-hover"
             >
               Glossário

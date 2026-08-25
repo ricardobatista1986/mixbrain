@@ -1,8 +1,17 @@
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { DEFAULT_SCORING_WEIGHTS, normalizeScoringWeights } from "@/lib/mixbrain/transition-score";
 
-const scoreFactors = [
+const FACTOR_META: Record<
+  keyof typeof DEFAULT_SCORING_WEIGHTS,
   {
-    weight: "28%",
+    title: string;
+    description: string;
+    example: string;
+    color: string;
+  }
+> = {
+  narrative: {
     title: "Narrativa",
     description:
       "Verifica se a transição contribui para a história aprovada do set: abertura, construção, vale, pico, contemplação ou encerramento.",
@@ -10,8 +19,7 @@ const scoreFactors = [
       "Uma track mais hipnótica e escura pode fazer sentido antes de uma expansão de groove, mesmo que não tenha a maior energia.",
     color: "border-claude-accent/30 bg-claude-accent/10 text-claude-accent-hover",
   },
-  {
-    weight: "22%",
+  timing: {
     title: "Momento da track",
     description:
       "Avalia se a faixa está entrando no instante certo. Uma excelente track pode ser ruim se aparecer cedo, tarde ou no bloco emocional errado.",
@@ -19,8 +27,7 @@ const scoreFactors = [
       "Uma track de peak-time pode receber score baixo no início, mas score alto depois de uma construção longa.",
     color: "border-sky-300/30 bg-sky-300/10 text-sky-100",
   },
-  {
-    weight: "16%",
+  harmony: {
     title: "Harmonia",
     description:
       "Usa key musical e Camelot para estimar compatibilidade tonal entre duas tracks. É um sinal importante, mas não manda sozinho na ordem.",
@@ -28,8 +35,7 @@ const scoreFactors = [
       "10B para 9A é uma relação próxima; ainda assim, uma transição pode ser rejeitada se quebrar a narrativa.",
     color: "border-violet-300/30 bg-violet-300/10 text-violet-100",
   },
-  {
-    weight: "13%",
+  energy: {
     title: "Energia",
     description:
       "Compara energia geral e dimensões como tensão, intensidade de pista, groove e agressividade para evitar saltos sem intenção.",
@@ -37,8 +43,7 @@ const scoreFactors = [
       "Uma queda de energia pode ser correta quando o briefing pede um vale ou momento de respiro.",
     color: "border-fuchsia-300/30 bg-fuchsia-300/10 text-fuchsia-100",
   },
-  {
-    weight: "9%",
+  mood: {
     title: "Textura e mood",
     description:
       "Compara atmosfera, densidade, hipnose, brilho, escuridão, emoção, melodia e vocal para evitar mudanças bruscas de paleta sonora.",
@@ -46,24 +51,32 @@ const scoreFactors = [
       "Duas tracks com BPM e key semelhantes podem precisar de uma bridge se uma é introspectiva e a próxima é muito expansiva.",
     color: "border-amber-300/30 bg-amber-300/10 text-amber-100",
   },
-  {
-    weight: "7%",
+  bpm: {
     title: "BPM",
     description:
-      "Mede a diferença percentual de BPM. O valor pode ser menor em importância porque a mudança de BPM pode ser deliberada e mixável.",
+      "Mede a diferença percentual de BPM. O valor pode ser menor em importância porque a mudança de BPM pode ser deliberada e mixável (inclusive relações de metade/dobro de tempo, tratadas como compatíveis).",
     example:
       "122 para 122 recebe compatibilidade alta; uma variação maior pode ser aceita quando a curva de tempo aprovada pede aceleração.",
     color: "border-lime-300/30 bg-lime-300/10 text-lime-100",
   },
-  {
-    weight: "5%",
+  diversity: {
     title: "Diversidade",
     description:
-      "Reduz o risco de repetição excessiva de um mesmo artista em sequência, mas não impede repetições intencionais.",
+      "Reduz o risco de repetição excessiva de um mesmo artista ou key numa janela recente, mas não impede repetições intencionais.",
     example:
       "Uma segunda track do mesmo artista pode entrar se for indispensável para a narrativa ou funcionar como bridge.",
     color: "border-emerald-300/30 bg-emerald-300/10 text-emerald-100",
   },
+};
+
+const FACTOR_ORDER: (keyof typeof DEFAULT_SCORING_WEIGHTS)[] = [
+  "narrative",
+  "timing",
+  "harmony",
+  "energy",
+  "mood",
+  "bpm",
+  "diversity",
 ];
 
 const dimensions = [
@@ -103,7 +116,53 @@ const rules = [
   },
 ];
 
-export default function GlossarioPage() {
+export default async function GlossarioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ projeto?: string }>;
+}) {
+  const { projeto: projectId } = await searchParams;
+
+  let projectName: string | null = null;
+  let weights: Record<keyof typeof DEFAULT_SCORING_WEIGHTS, number> = DEFAULT_SCORING_WEIGHTS;
+  let isCustom = false;
+
+  if (projectId) {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      const { data: project } = await supabase
+        .from("set_projects")
+        .select("name, scoring_weights")
+        .eq("id", projectId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (project) {
+        projectName = project.name;
+        const normalized = normalizeScoringWeights(project.scoring_weights);
+        if (normalized) {
+          isCustom = true;
+          weights = { ...DEFAULT_SCORING_WEIGHTS, ...normalized };
+        }
+      }
+    }
+  }
+
+  const totalWeight = FACTOR_ORDER.reduce((sum, key) => sum + (weights[key] ?? 0), 0);
+  const scoreFactors = FACTOR_ORDER.map((key) => {
+    const rawWeight = weights[key] ?? 0;
+    const normalizedPercent = totalWeight > 0 ? (rawWeight / totalWeight) * 100 : 0;
+    return {
+      key,
+      weight: `${Math.round(normalizedPercent)}%`,
+      ...FACTOR_META[key],
+    };
+  });
+
   return (
     <main className="min-h-screen bg-claude-bg text-claude-text">
       <header className="border-b border-claude-border bg-claude-bg/90 backdrop-blur">
@@ -122,10 +181,10 @@ export default function GlossarioPage() {
           </Link>
 
           <Link
-            href="/"
+            href={projectId ? `/app/projetos/${projectId}` : "/"}
             className="rounded-full border border-claude-border px-4 py-2 text-sm font-medium text-claude-text-muted transition hover:border-claude-accent/50 hover:text-claude-accent-hover"
           >
-            Voltar ao início
+            {projectId ? "Voltar ao projeto" : "Voltar ao início"}
           </Link>
         </div>
       </header>
@@ -140,9 +199,30 @@ export default function GlossarioPage() {
           </h1>
           <p className="mt-6 max-w-3xl text-lg leading-8 text-claude-text-muted">
             Esta página explica pesos, dimensões, alertas e regras operacionais.
-            Ela será acessível de dentro de todas as telas que exibirem um score
-            ou uma recomendação.
+            Ela é acessível de dentro das telas que exibem um score ou uma
+            recomendação.
           </p>
+
+          {projectId ? (
+            isCustom ? (
+              <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-claude-accent/40 bg-claude-accent/10 px-4 py-2 text-sm font-semibold text-claude-accent-hover">
+                Mostrando os pesos personalizados do projeto
+                {projectName ? ` "${projectName}"` : ""} — não os padrões
+                abaixo.
+              </p>
+            ) : (
+              <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-claude-border bg-claude-surface px-4 py-2 text-sm text-claude-text-muted">
+                {projectName ? `O projeto "${projectName}"` : "Este projeto"}{" "}
+                ainda usa os pesos padrão (nenhuma personalização salva).
+              </p>
+            )
+          ) : (
+            <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-claude-border bg-claude-surface px-4 py-2 text-sm text-claude-text-muted">
+              Mostrando os pesos padrão. Cada projeto pode ajustar esses pesos
+              individualmente — acesse o glossário de dentro de um projeto
+              para ver os pesos que estão valendo ali.
+            </p>
+          )}
         </div>
       </section>
 
@@ -155,9 +235,9 @@ export default function GlossarioPage() {
             O que forma uma recomendação
           </h2>
           <p className="mt-4 leading-7 text-claude-text-muted">
-            Para cada relação entre track A e track B, o sistema combina estes
-            fatores. Os pesos abaixo são o padrão inicial e poderão ser ajustados
-            por projeto no futuro.
+            {isCustom
+              ? "Para cada relação entre track A e track B, o sistema combina estes fatores usando os pesos personalizados deste projeto."
+              : "Para cada relação entre track A e track B, o sistema combina estes fatores. Os pesos abaixo são o padrão inicial e podem ser ajustados por projeto no painel de curadoria."}
           </p>
         </div>
 
