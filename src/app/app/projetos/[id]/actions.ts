@@ -1023,100 +1023,34 @@ export async function restoreSetVersion(formData: FormData) {
 
   await ensureProjectOwnership(supabase, projectId, userId);
 
-  const { data: version, error: versionError } = await supabase
-    .from("set_versions")
-    .select("snapshot")
-    .eq("id", versionId)
-    .eq("project_id", projectId)
-    .single();
+  // Delete (tracklist + blocos) + recriação a partir do snapshot rodam numa
+  // única transação dentro da RPC restore_set_version. Antes isso era uma
+  // sequência de chamadas supabase-js sem atomicidade: uma falha no meio
+  // (rede, constraint, timeout) deixava a tracklist apagada e não
+  // restaurada, sem rollback — o pior lugar possível pra isso acontecer,
+  // já que é a função de recuperação de desastre.
+  const { data, error } = await supabase.rpc("restore_set_version", {
+    p_project_id: projectId,
+    p_version_id: versionId,
+  });
 
-  if (versionError || !version) {
-    throw new Error("Versão não encontrada.");
+  if (error) {
+    throw new Error(error.message);
   }
 
-  const snapshot = version.snapshot as VersionSnapshot;
-
-  const { error: deleteItemsError } = await supabase
-    .from("set_tracklist_items")
-    .delete()
-    .eq("project_id", projectId);
-
-  if (deleteItemsError) {
-    throw new Error(deleteItemsError.message);
-  }
-
-  const { error: deleteBlocksError } = await supabase
-    .from("set_blocks")
-    .delete()
-    .eq("project_id", projectId);
-
-  if (deleteBlocksError) {
-    throw new Error(deleteBlocksError.message);
-  }
-
-  const blockIdMap = new Map<string, string>();
-
-  for (const block of snapshot.blocks ?? []) {
-    const { data: newBlock, error: blockError } = await supabase
-      .from("set_blocks")
-      .insert({ project_id: projectId, name: block.name })
-      .select("id")
-      .single();
-
-    if (blockError || !newBlock) {
-      throw new Error(blockError?.message || "Erro ao restaurar bloco.");
-    }
-
-    blockIdMap.set(block.tempId, newBlock.id);
-  }
-
-  const trackIds = [...new Set((snapshot.items ?? []).map((item) => item.track_id))];
-
-  const { data: existingTracks, error: tracksError } = await supabase
-    .from("tracks")
-    .select("id")
-    .eq("user_id", userId)
-    .in("id", trackIds.length > 0 ? trackIds : ["00000000-0000-0000-0000-000000000000"]);
-
-  if (tracksError) {
-    throw new Error(tracksError.message);
-  }
-
-  const existingTrackIdSet = new Set((existingTracks ?? []).map((track) => track.id));
-
-  const rowsToInsert = (snapshot.items ?? [])
-    .filter((item) => existingTrackIdSet.has(item.track_id))
-    .map((item, index) => ({
-      project_id: projectId,
-      track_id: item.track_id,
-      position: index + 1,
-      curatorial_moment: item.curatorial_moment,
-      curatorial_intent: item.curatorial_intent,
-      block_id: item.block_temp_id
-        ? blockIdMap.get(item.block_temp_id) ?? null
-        : null,
-    }));
-
-  if (rowsToInsert.length > 0) {
-    const { error: insertError } = await supabase
-      .from("set_tracklist_items")
-      .insert(rowsToInsert);
-
-    if (insertError) {
-      throw new Error(insertError.message);
-    }
-  }
+  const restoredCount = (data as { restored_count?: number } | null)?.restored_count ?? 0;
+  const skippedCount = (data as { skipped_count?: number } | null)?.skipped_count ?? 0;
 
   await logCurationEvent(supabase, userId, projectId, "set_version_restored", {
     version_id: versionId,
-    restored_count: rowsToInsert.length,
+    restored_count: restoredCount,
   });
 
   revalidatePath(`/app/projetos/${projectId}`);
 
   return {
-    restoredCount: rowsToInsert.length,
-    skippedCount: (snapshot.items ?? []).length - rowsToInsert.length,
+    restoredCount,
+    skippedCount,
   };
 }
 
