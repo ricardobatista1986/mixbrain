@@ -15,6 +15,40 @@ const FACTOR_LABELS: { key: keyof typeof DEFAULT_SCORING_WEIGHTS; label: string 
   { key: "diversity", label: "Diversidade" },
 ];
 
+type WeightPreset = {
+  id: string;
+  label: string;
+  description: string;
+  weights: Record<keyof typeof DEFAULT_SCORING_WEIGHTS, number>;
+};
+
+const WEIGHT_PRESETS: WeightPreset[] = [
+  {
+    id: "default",
+    label: "Padrão (narrativa)",
+    description: "O critério padrão do MixBrain: a história do set manda, harmonia e energia dão suporte.",
+    weights: { ...DEFAULT_SCORING_WEIGHTS },
+  },
+  {
+    id: "peak-time",
+    label: "Peak time",
+    description: "Pista cheia, sem tempo pra respirar: energia e BPM no comando, narrativa em segundo plano.",
+    weights: { narrative: 12, timing: 14, harmony: 20, energy: 24, mood: 6, bpm: 20, diversity: 4 },
+  },
+  {
+    id: "fuzzy",
+    label: "Fuzzy (seguro)",
+    description: "Prioriza compatibilidade harmônica acima de tudo — transições que nunca soam fora de tom.",
+    weights: { narrative: 8, timing: 6, harmony: 42, energy: 14, mood: 10, bpm: 18, diversity: 2 },
+  },
+  {
+    id: "deep",
+    label: "Deep / hipnótico",
+    description: "Sets longos e lentos: textura e narrativa importam mais que picos de energia.",
+    weights: { narrative: 20, timing: 14, harmony: 20, energy: 6, mood: 26, bpm: 12, diversity: 2 },
+  },
+];
+
 export function ScoringWeightsPanel({
   projectId,
   currentWeights,
@@ -35,6 +69,14 @@ export function ScoringWeightsPanel({
   const [isPending, startTransition] = useTransition();
 
   const total = Object.values(values).reduce((sum, value) => sum + value, 0);
+
+  const activePresetId = WEIGHT_PRESETS.find((preset) =>
+    FACTOR_LABELS.every(({ key }) => preset.weights[key] === values[key])
+  )?.id;
+
+  function applyPreset(preset: WeightPreset) {
+    setValues({ ...preset.weights });
+  }
 
   function handleSave() {
     setError("");
@@ -76,6 +118,39 @@ export function ScoringWeightsPanel({
         Mude a importância de cada fator no score e na ordenação automática.
         Não precisa somar 100 — é o peso relativo entre os fatores que importa,
         não o valor absoluto. Padrão entre parênteses.
+      </p>
+
+      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        {WEIGHT_PRESETS.map((preset) => {
+          const isActive = activePresetId === preset.id;
+          return (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => applyPreset(preset)}
+              disabled={isPending}
+              className={`rounded-xl border p-3 text-left transition ${
+                isActive
+                  ? "border-claude-accent bg-claude-accent/10"
+                  : "border-claude-border bg-claude-surface-2 hover:border-claude-accent/40"
+              }`}
+            >
+              <span
+                className={`text-sm font-bold ${isActive ? "text-claude-accent" : "text-claude-text"}`}
+              >
+                {preset.label}
+                {isActive ? " ✓" : ""}
+              </span>
+              <p className="mt-0.5 text-xs leading-5 text-claude-text-muted">
+                {preset.description}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-xs text-claude-text-faint">
+        Um preset só preenche os campos abaixo — continue ajustando e clique em
+        &quot;Salvar pesos&quot; pra valer.
       </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">

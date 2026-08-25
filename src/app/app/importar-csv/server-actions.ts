@@ -211,11 +211,20 @@ export async function importTracksFromCsv(
       const trackErrors: string[] = [];
 
       for (const trackSubChunk of chunkArray(rowsToInsert, CANDIDATE_SUB_CHUNK_SIZE)) {
-        const { data: inserted, error: insertError } = await supabase
-          .from("tracks")
-          .insert(
-            trackSubChunk.map((row) => ({
-              user_id: userId,
+        // bulk_find_or_create_tracks resolve a identidade da track DENTRO do
+        // banco via ON CONFLICT, usando a mesma expressão do índice único
+        // tracks_user_normalized_identity_unique — em vez de um INSERT cru
+        // que dependia do pré-check em JS (makeTrackKey) bater 1:1 com a
+        // normalização em SQL do índice. Os dois motores de normalização
+        // (JS Unicode vs regex do Postgres) podem divergir em casos de
+        // borda; isso já causou "duplicate key value violates unique
+        // constraint" em produção com uma track que o JS achou nova mas o
+        // banco já tinha. Com ON CONFLICT, o banco decide por si mesmo —
+        // nunca mais diverge da sua própria constraint.
+        const { data: resolved, error: rpcError } = await supabase.rpc(
+          "bulk_find_or_create_tracks",
+          {
+            p_rows: trackSubChunk.map((row) => ({
               title: row.title,
               artist: row.artist || UNKNOWN_ARTIST,
               bpm: sanitizeBpm(row.bpm),
@@ -223,20 +232,34 @@ export async function importTracksFromCsv(
               energy: sanitizeEnergy(row.energy),
               mood: row.mood,
               notes: row.notes,
-              source_name: "csv",
-              source: "csv",
-            }))
-          )
-          .select("id, title, artist");
+            })),
+          }
+        );
 
-        if (insertError) {
-          trackErrors.push(insertError.message);
+        if (rpcError) {
+          trackErrors.push(rpcError.message);
           continue;
         }
 
-        for (const track of (inserted ?? []) as LibraryTrack[]) {
-          library.set(makeTrackKey(track.title, track.artist), track);
-          createdCount += 1;
+        for (const result of (resolved ?? []) as {
+          row_index: number;
+          id: string;
+          was_created: boolean;
+        }[]) {
+          const row = trackSubChunk[result.row_index];
+          if (!row || !result.id) continue;
+
+          library.set(makeTrackKey(row.title, row.artist || UNKNOWN_ARTIST), {
+            id: result.id,
+            title: row.title,
+            artist: row.artist || UNKNOWN_ARTIST,
+          });
+
+          if (result.was_created) {
+            createdCount += 1;
+          } else {
+            reusedCount += 1;
+          }
         }
       }
 
