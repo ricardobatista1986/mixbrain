@@ -193,18 +193,17 @@ function computeSelectionPenalty(
  * — ajustado por penalidades de fadiga, categorias de ponta e curva de
  * energia alvo (ver computeSelectionPenalty).
  *
- * É uma heurística gulosa, não uma otimização global (não é um solver de
- * TSP) — mas é determinística, rápida (O(n²), tranquilo para dezenas ou
- * poucas centenas de tracks) e usa o mesmo critério que já explica o
- * score na UI, então o resultado é auditável pelo usuário depois.
+ * É uma heurística gulosa: rápida, determinística e auditável, mas sujeita
+ * à armadilha clássica do greedy — gasta as melhores combinações cedo e
+ * empurra as piores pro final, sem nunca reconsiderar uma escolha. Por
+ * isso o resultado passa por refineSequenceLocalSearch antes de retornar
+ * (ver comentário lá).
  */
-export function buildAutoSequence(
+function buildGreedySequence(
   units: SequenceUnit[],
   weights?: ScoringWeights,
   targetCurve?: TargetEnergyCurve
 ): SequenceUnit[] {
-  if (units.length <= 1) return [...units];
-
   const remaining = [...units];
   const seedIndex = pickSeedIndex(remaining, targetCurve);
   const sequence: SequenceUnit[] = [remaining.splice(seedIndex, 1)[0]];
@@ -243,6 +242,171 @@ export function buildAutoSequence(
   }
 
   return sequence;
+}
+
+// --- Refinamento pós-construção (busca local) --------------------------
+//
+// O score de transição do MixBrain não é simétrico (narrativa, timing e
+// curva de energia dependem de direção: A→B não "vale" o mesmo que B→A).
+// Isso descarta 2-opt clássico, que melhora uma sequência invertendo
+// segmentos inteiros — inverter um trecho inverteria também a direção de
+// todas as transições internas dele, e o ganho vira aposta, não garantia.
+//
+// Em vez disso, usa-se busca local com dois tipos de movimento que só
+// mexem nas bordas (nunca invertem um trecho por dentro), então são
+// seguros com custo assimétrico:
+//   - swap adjacente: troca duas unidades vizinhas de posição.
+//   - or-opt: tira uma unidade do lugar e reinsere em outra posição
+//     próxima (janela limitada, não testa toda posição possível).
+// A cada passada, testa todos os movimentos desses dois tipos e aplica o
+// primeiro que aumentar o score total da sequência; repete até uma
+// passada inteira não melhorar nada (ou até o teto de passadas).
+//
+// Isso corrige exatamente o erro clássico do greedy (deixar as piores
+// transições pro final por nunca reconsiderar uma escolha) sem exigir um
+// solver de TSP de verdade — continua O(n² · passadas), tranquilo para
+// dezenas ou poucas centenas de tracks.
+
+const OR_OPT_WINDOW = 12;
+const MAX_LOCAL_SEARCH_PASSES = 30;
+
+function computeFatiguePenaltyAt(sequence: SequenceUnit[], index: number): number {
+  let penalty = 0;
+  const window = sequence.slice(Math.max(0, index - FATIGUE_WINDOW), index);
+  const unit = sequence[index];
+
+  const artist = normalizeArtist(unit.entryTrack.artist);
+  if (artist && window.some((w) => normalizeArtist(w.exitTrack.artist) === artist)) {
+    penalty += ARTIST_FATIGUE_PENALTY;
+  }
+
+  const key = unit.entryTrack.musical_key;
+  if (key && window.some((w) => w.exitTrack.musical_key === key)) {
+    penalty += KEY_FATIGUE_PENALTY;
+  }
+
+  return penalty;
+}
+
+function computeEdgeCategoryPenaltyAt(sequence: SequenceUnit[], index: number): number {
+  const unit = sequence[index];
+  const moment = unit.entryContext?.curatorial_moment;
+  const isFirst = index === 0;
+  const isLast = index === sequence.length - 1;
+
+  let penalty = 0;
+  if (moment === "closing" && !isLast) penalty += CLOSING_MID_SET_PENALTY;
+  if (moment === "opening" && !isFirst) penalty += OPENING_MID_SET_PENALTY;
+  if (moment === "peak" && (isFirst || isLast)) penalty += PEAK_AT_EDGE_PENALTY;
+  return penalty;
+}
+
+function computeEnergyCurvePenaltyAt(
+  sequence: SequenceUnit[],
+  index: number,
+  targetCurve: TargetEnergyCurve | undefined
+): number {
+  if (!targetCurve) return 0;
+  const unit = sequence[index];
+  if (unit.entryTrack.energy === null) return 0;
+
+  const progress = sequence.length <= 1 ? 0 : index / (sequence.length - 1);
+  const target = interpolateTargetEnergy(targetCurve, Math.min(1, progress));
+  if (target === null) return 0;
+
+  return Math.abs(unit.entryTrack.energy - target) * ENERGY_TARGET_PENALTY_PER_POINT;
+}
+
+/** Score total de uma sequência completa: soma dos scores de transição entre unidades vizinhas, menos as mesmas penalidades heurísticas usadas na construção gulosa (agora avaliadas por posição absoluta, não incrementalmente). */
+function scoreSequence(
+  sequence: SequenceUnit[],
+  weights: ScoringWeights | undefined,
+  targetCurve: TargetEnergyCurve | undefined
+): number {
+  let total = 0;
+
+  for (let i = 0; i < sequence.length; i += 1) {
+    if (i > 0) {
+      const transition = calculateTransitionScore(
+        sequence[i - 1].exitTrack,
+        sequence[i].entryTrack,
+        sequence[i - 1].exitContext,
+        sequence[i].entryContext,
+        weights
+      );
+      total += transition?.finalScore ?? 0;
+    }
+
+    total -= computeFatiguePenaltyAt(sequence, i);
+    total -= computeEdgeCategoryPenaltyAt(sequence, i);
+    total -= computeEnergyCurvePenaltyAt(sequence, i, targetCurve);
+  }
+
+  return total;
+}
+
+function refineSequenceLocalSearch(
+  initial: SequenceUnit[],
+  weights: ScoringWeights | undefined,
+  targetCurve: TargetEnergyCurve | undefined
+): SequenceUnit[] {
+  if (initial.length <= 2) return initial;
+
+  let sequence = initial;
+  let bestScore = scoreSequence(sequence, weights, targetCurve);
+
+  for (let pass = 0; pass < MAX_LOCAL_SEARCH_PASSES; pass += 1) {
+    let improved = false;
+
+    // Swap adjacente.
+    for (let i = 0; i < sequence.length - 1; i += 1) {
+      const candidate = [...sequence];
+      [candidate[i], candidate[i + 1]] = [candidate[i + 1], candidate[i]];
+
+      const candidateScore = scoreSequence(candidate, weights, targetCurve);
+      if (candidateScore > bestScore + 1e-9) {
+        sequence = candidate;
+        bestScore = candidateScore;
+        improved = true;
+      }
+    }
+
+    // Or-opt: realoca cada unidade dentro de uma janela próxima.
+    for (let i = 0; i < sequence.length; i += 1) {
+      const from = Math.max(0, i - OR_OPT_WINDOW);
+      const to = Math.min(sequence.length - 1, i + OR_OPT_WINDOW);
+
+      for (let j = from; j <= to; j += 1) {
+        if (j === i) continue;
+
+        const candidate = [...sequence];
+        const [moved] = candidate.splice(i, 1);
+        candidate.splice(j, 0, moved);
+
+        const candidateScore = scoreSequence(candidate, weights, targetCurve);
+        if (candidateScore > bestScore + 1e-9) {
+          sequence = candidate;
+          bestScore = candidateScore;
+          improved = true;
+        }
+      }
+    }
+
+    if (!improved) break;
+  }
+
+  return sequence;
+}
+
+export function buildAutoSequence(
+  units: SequenceUnit[],
+  weights?: ScoringWeights,
+  targetCurve?: TargetEnergyCurve
+): SequenceUnit[] {
+  if (units.length <= 1) return [...units];
+
+  const greedySequence = buildGreedySequence(units, weights, targetCurve);
+  return refineSequenceLocalSearch(greedySequence, weights, targetCurve);
 }
 
 export type { CuratorialMoment };
