@@ -558,6 +558,9 @@ export async function updateCuratorialFields(formData: FormData) {
   const curatorialMomentRaw = String(
     formData.get("curatorial_moment") || ""
   ).trim();
+  const curatorialIntentRaw = String(
+    formData.get("curatorial_intent") || ""
+  ).trim();
 
   if (!projectId || !tracklistItemId) {
     throw new Error("Dados inválidos.");
@@ -566,6 +569,9 @@ export async function updateCuratorialFields(formData: FormData) {
   await ensureProjectOwnership(supabase, projectId, userId);
 
   const curatorialMoment = curatorialMomentRaw || null;
+  const curatorialIntent = curatorialIntentRaw
+    ? curatorialIntentRaw.slice(0, 2000)
+    : null;
 
   const allowedMoments = new Set([
     "opening",
@@ -584,6 +590,7 @@ export async function updateCuratorialFields(formData: FormData) {
     .from("set_tracklist_items")
     .update({
       curatorial_moment: curatorialMoment,
+      curatorial_intent: curatorialIntent,
     })
     .eq("id", tracklistItemId)
     .eq("project_id", projectId);

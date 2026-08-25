@@ -434,9 +434,23 @@ function CuratorialEditor({
             type="submit"
             className="w-full rounded-xl bg-claude-surface-3 px-4 py-2 text-sm font-bold text-white transition hover:bg-claude-surface-3 sm:w-auto"
           >
-            Salvar momento
+            Salvar
           </button>
         </div>
+      </div>
+
+      <div className="mt-3">
+        <label className="mb-1 block text-[11px] font-bold uppercase tracking-[0.18em] text-claude-text-muted">
+          Por que essa track está aqui (opcional)
+        </label>
+        <textarea
+          name="curatorial_intent"
+          defaultValue={item.curatorial_intent ?? ""}
+          placeholder="Ex.: bridge entre o vale hipnótico e a retomada de energia — prepara a key da próxima sem soar repetitiva."
+          rows={2}
+          maxLength={2000}
+          className="w-full resize-y rounded-xl border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none placeholder:text-claude-text-faint"
+        />
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-xs text-claude-text-muted">
