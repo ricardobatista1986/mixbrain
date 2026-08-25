@@ -90,7 +90,7 @@ function pickSeedIndex(units: SequenceUnit[], targetCurve?: TargetEnergyCurve): 
 }
 
 /** Interpola a curva de energia alvo (5 pontos em 0/25/50/75/100%) numa posição relativa 0..1. */
-function interpolateTargetEnergy(curve: TargetEnergyCurve, progress: number): number | null {
+export function interpolateTargetEnergy(curve: TargetEnergyCurve, progress: number): number | null {
   const checkpoints = [0, 0.25, 0.5, 0.75, 1];
   const defined = curve
     .map((value, index) => ({ value, position: checkpoints[index] }))
@@ -410,3 +410,21 @@ export function buildAutoSequence(
 }
 
 export type { CuratorialMoment };
+
+/**
+ * Normaliza o valor bruto vindo de set_projects.target_energy_curve (jsonb)
+ * para o formato tipado usado pelo algoritmo e pela visualização — mesma
+ * validação em ambos os lugares, então "sem curva definida" nunca diverge
+ * entre o que o auto-organize usa e o que o gráfico mostra.
+ */
+export function normalizeTargetEnergyCurve(raw: unknown): TargetEnergyCurve | undefined {
+  if (!Array.isArray(raw) || raw.length !== 5) return undefined;
+
+  const parsed = raw.map((value) =>
+    typeof value === "number" && Number.isFinite(value) ? value : null
+  ) as TargetEnergyCurve;
+
+  if (parsed.every((value) => value === null)) return undefined;
+
+  return parsed;
+}

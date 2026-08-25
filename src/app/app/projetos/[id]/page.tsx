@@ -17,6 +17,10 @@ import {
 import { CurationTimeline, type CurationEventSummary } from "@/components/curation-timeline";
 import { ScoringWeightsPanel } from "@/components/scoring-weights-panel";
 import { EnergyCurveEditor } from "@/components/energy-curve-editor";
+import {
+  interpolateTargetEnergy,
+  normalizeTargetEnergyCurve,
+} from "@/lib/mixbrain/auto-sequence";
 import { BridgeSuggestions, type BridgeSuggestionTrack } from "@/components/bridge-suggestions";
 import { EnergyArcChart, type EnergyPoint } from "@/components/energy-arc-chart";
 import { ProjectTabs } from "@/components/project-tabs";
@@ -795,6 +799,30 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
     return [row];
   });
 
+  const flatTracklist = groupedItems.flatMap((group) => {
+    const items = group.isBlock ? group.items : [group.item];
+    return items
+      .map((item) => {
+        const track = getTrackFromRelation(item.tracks);
+        if (!track) return null;
+        return { track, context: getContextFromItem(item) };
+      })
+      .filter((entry): entry is { track: ScoreTrack; context: ScoreTracklistItemContext | null } => entry !== null);
+  });
+
+  const transitionSummary = { Excelente: 0, Boa: 0, Atenção: 0, Fraca: 0, "Dados insuficientes": 0 };
+  for (let i = 0; i < flatTracklist.length - 1; i += 1) {
+    const score = calculateTransitionScore(
+      flatTracklist[i].track,
+      flatTracklist[i + 1].track,
+      flatTracklist[i].context,
+      flatTracklist[i + 1].context,
+      scoringWeights
+    );
+    if (score) transitionSummary[score.label] += 1;
+  }
+  const totalTransitions = flatTracklist.length - 1;
+
   const energyPoints: EnergyPoint[] = groupedItems.flatMap((group) => {
     const items = group.isBlock ? group.items : [group.item];
     return items
@@ -810,6 +838,20 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
       })
       .filter((point): point is EnergyPoint => point !== null);
   });
+
+  const normalizedTargetCurve = normalizeTargetEnergyCurve(project.target_energy_curve);
+  const targetCurvePoints =
+    normalizedTargetCurve && energyPoints.length > 1
+      ? energyPoints
+          .map((_, index) => {
+            const progress = index / (energyPoints.length - 1);
+            const energy = interpolateTargetEnergy(normalizedTargetCurve, progress);
+            return energy === null
+              ? null
+              : { positionPercent: (index / (energyPoints.length - 1)) * 100, energy };
+          })
+          .filter((point): point is { positionPercent: number; energy: number } => point !== null)
+      : undefined;
 
   const { data: rawVersions } = await supabase
     .from("set_versions")
@@ -1094,6 +1136,39 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             </div>
 
             <div className="mt-6 space-y-4">
+              {totalTransitions > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-claude-border bg-claude-surface/40 px-4 py-3 text-xs">
+                  <span className="font-bold text-claude-text">
+                    {totalTransitions} transiç{totalTransitions === 1 ? "ão" : "ões"}:
+                  </span>
+                  {transitionSummary.Excelente > 0 ? (
+                    <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 font-semibold text-emerald-300">
+                      {transitionSummary.Excelente} excelente{transitionSummary.Excelente === 1 ? "" : "s"}
+                    </span>
+                  ) : null}
+                  {transitionSummary.Boa > 0 ? (
+                    <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-2.5 py-1 font-semibold text-sky-300">
+                      {transitionSummary.Boa} boa{transitionSummary.Boa === 1 ? "" : "s"}
+                    </span>
+                  ) : null}
+                  {transitionSummary["Atenção"] > 0 ? (
+                    <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 font-semibold text-amber-300">
+                      {transitionSummary["Atenção"]} pedindo atenção
+                    </span>
+                  ) : null}
+                  {transitionSummary.Fraca > 0 ? (
+                    <span className="rounded-full border border-rose-400/30 bg-rose-400/10 px-2.5 py-1 font-semibold text-rose-300">
+                      {transitionSummary.Fraca} fraca{transitionSummary.Fraca === 1 ? "" : "s"}
+                    </span>
+                  ) : null}
+                  {transitionSummary["Dados insuficientes"] > 0 ? (
+                    <span className="rounded-full border border-claude-border px-2.5 py-1 font-semibold text-claude-text-muted">
+                      {transitionSummary["Dados insuficientes"]} sem dados suficientes
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+
               {groupedItems.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-claude-border p-6 text-center">
                   <p className="text-claude-text-muted">Nenhuma track aprovada ainda.</p>
@@ -1423,7 +1498,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
         </div>
 
         <div className="mt-8">
-          <EnergyArcChart points={energyPoints} />
+          <EnergyArcChart points={energyPoints} targetCurve={targetCurvePoints} />
         </div>
                 </>
               ),

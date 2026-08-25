@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
   buildAutoSequence,
+  normalizeTargetEnergyCurve,
   type SequenceUnit,
-  type TargetEnergyCurve,
 } from "@/lib/mixbrain/auto-sequence";
 import type {
   CuratorialMoment,
@@ -1227,18 +1227,6 @@ export async function reorderTracklist(
   await applyNewOrder(supabase, projectId, newOrderArray);
 
   revalidatePath(`/app/projetos/${projectId}`);
-}
-
-function normalizeTargetEnergyCurve(raw: unknown): TargetEnergyCurve | undefined {
-  if (!Array.isArray(raw) || raw.length !== 5) return undefined;
-
-  const parsed = raw.map((value) =>
-    typeof value === "number" && Number.isFinite(value) ? value : null
-  ) as TargetEnergyCurve;
-
-  if (parsed.every((value) => value === null)) return undefined;
-
-  return parsed;
 }
 
 export async function updateTargetEnergyCurve(formData: FormData) {
