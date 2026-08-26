@@ -2,7 +2,17 @@
 
 Pendências abertas, mais recentes no topo. Formato: data, descrição, contexto.
 
-## 2026-08-23
+## 2026-08-24
+
+- [ ] **Sem card de transição entre o último item de um bloco congelado e
+  o próximo grupo.** Achado revisando a feature de travar transição: o
+  ramo de renderização de bloco (`page.tsx`) só mostra `TransitionScoreCard`
+  para transições *dentro* do bloco (entre membros consecutivos) — a
+  transição do último membro do bloco para o próximo grupo (outro bloco
+  ou item solto) nunca aparece como card em lugar nenhum. O resumo
+  agregado do topo da tracklist conta essa transição corretamente (usa
+  flatTracklist, não os cards), então os números batem; só falta o card
+  individual pra essa transição específica ser exibido/expansível.
 
 - [x] **Exibição de tracks em formato lista — biblioteca.** Painel "Sugestões
   inteligentes da biblioteca" (`library-suggestions.tsx`), única tela onde

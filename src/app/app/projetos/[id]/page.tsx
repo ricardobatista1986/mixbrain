@@ -302,6 +302,7 @@ function TransitionScoreCard({
   decision,
   bridgeSuggestions,
   isLocked,
+  canCreateLock = true,
 }: {
   score: TransitionScore | null;
   projectId?: string;
@@ -310,6 +311,17 @@ function TransitionScoreCard({
   decision?: TransitionDecision | null;
   bridgeSuggestions?: BridgeSuggestionTrack[];
   isLocked?: boolean;
+  /**
+   * false quando a próxima track pertence a um bloco congelado: travar
+   * esse par ficaria salvo no banco mas sem nenhum efeito no
+   * auto-organize (fuseLockedUnits só funde tracks soltas, não entra
+   * bloco por dentro nem gruda algo numa borda dele) — nesse caso o
+   * botão de CRIAR trava não é mostrado, pra não prometer um
+   * comportamento que o algoritmo não cumpre. Destravar continua
+   * disponível sempre, mesmo aqui, pra permitir limpar uma trava velha
+   * que ficou "presa" depois que a track virou membro de um bloco.
+   */
+  canCreateLock?: boolean;
 }) {
   if (!score) return null;
 
@@ -402,7 +414,7 @@ function TransitionScoreCard({
           />
         ) : null}
 
-        {projectId && fromTrackId && toTrackId ? (
+        {projectId && fromTrackId && toTrackId && (isLocked || canCreateLock) ? (
           <form
             action={isLocked ? unlockTransition : lockTransition}
             className="mt-3"
@@ -1523,6 +1535,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                         toTrackId={nextTrack?.id}
                         decision={getTransitionDecision(track.id, nextTrack?.id)}
                         isLocked={isTransitionLocked(track.id, nextTrack?.id)}
+                        canCreateLock={!nextGroup?.isBlock}
                         bridgeSuggestions={
                           nextTrack &&
                           transitionScore &&
