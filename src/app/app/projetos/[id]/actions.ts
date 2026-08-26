@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
   buildAutoSequence,
+  fuseLockedUnits,
   normalizeTargetEnergyCurve,
   type SequenceUnit,
+  type TransitionLock,
 } from "@/lib/mixbrain/auto-sequence";
 import type {
   CuratorialMoment,
@@ -871,7 +873,19 @@ export async function autoOrganizeTracklist(projectId: string) {
     );
   }
 
-  const sequence = buildAutoSequence(units, scoringWeights, targetEnergyCurve);
+  const { data: locksRaw } = await supabase
+    .from("set_transition_locks")
+    .select("from_track_id, to_track_id")
+    .eq("project_id", projectId);
+
+  const locks: TransitionLock[] = (locksRaw ?? []).map((row) => ({
+    fromTrackId: row.from_track_id as string,
+    toTrackId: row.to_track_id as string,
+  }));
+
+  const fusedUnits = fuseLockedUnits(units, locks);
+
+  const sequence = buildAutoSequence(fusedUnits, scoringWeights, targetEnergyCurve);
   const flatMembers = sequence.flatMap((unit) => unit.members);
 
   const newTrackIds = flatMembers
@@ -900,13 +914,15 @@ export async function autoOrganizeTracklist(projectId: string) {
   revalidatePath(`/app/projetos/${projectId}`);
 
   const newCount = newTrackIds.length;
-  const blockCount = sequence.filter((unit) => unit.members.length > 1).length;
+  const blockCount = sequence.filter((unit) => unit.key.startsWith("existing-block:")).length;
+  const lockedChainCount = sequence.filter((unit) => unit.key.startsWith("locked-chain:")).length;
 
   return {
     totalCount: flatMembers.length,
     newCount,
     existingCount: flatMembers.length - newCount,
     blockCount,
+    lockedChainCount,
   };
 }
 
@@ -1225,6 +1241,103 @@ export async function reorderTracklist(
   }));
 
   await applyNewOrder(supabase, projectId, newOrderArray);
+
+  revalidatePath(`/app/projetos/${projectId}`);
+}
+
+/**
+ * Trava uma transição específica (fromTrackId deve vir imediatamente
+ * antes de toTrackId sempre que "Gerar ordem automática" rodar), sem
+ * precisar criar um bloco nomeado — mais leve, útil quando só uma
+ * transição pontual importa preservar.
+ *
+ * Diferente de bloco congelado: o lock é amarrado ao PAR DE TRACKS, não
+ * à posição atual na tracklist. Reordenar manualmente (drag-and-drop,
+ * mover cima/baixo) não quebra nem "desliza" o lock pra outro par — ele
+ * só é aplicado de novo na próxima vez que o auto-organize rodar.
+ */
+export async function lockTransition(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
+  const projectId = String(formData.get("project_id") || "");
+  const fromTrackId = String(formData.get("from_track_id") || "");
+  const toTrackId = String(formData.get("to_track_id") || "");
+
+  if (!projectId || !fromTrackId || !toTrackId || fromTrackId === toTrackId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  // Impede ciclo (A->B->C->A) antes de gravar: segue a cadeia a partir de
+  // toTrackId e, se ela chegar de volta em fromTrackId, essa trava
+  // fecharia um laço sem começo nem fim — o auto-organize não teria como
+  // decidir onde a cadeia entra na sequência. fuseLockedUnits também tem
+  // uma rede de segurança contra ciclo (nunca perde tracks mesmo se um
+  // chegar a existir), mas é melhor recusar aqui com uma mensagem clara
+  // do que deixar o usuário criar um lock que não faz sentido.
+  const { data: existingLocks } = await supabase
+    .from("set_transition_locks")
+    .select("from_track_id, to_track_id")
+    .eq("project_id", projectId);
+
+  const nextOf = new Map<string, string>(
+    (existingLocks ?? []).map((row) => [row.from_track_id as string, row.to_track_id as string])
+  );
+
+  let cursor: string | undefined = toTrackId;
+  const seen = new Set<string>();
+  while (cursor) {
+    if (cursor === fromTrackId) {
+      throw new Error(
+        "Essa trava fecharia um ciclo (a cadeia voltaria pra track de origem). Remova alguma trava do meio antes."
+      );
+    }
+    if (seen.has(cursor)) break;
+    seen.add(cursor);
+    cursor = nextOf.get(cursor);
+  }
+
+  const { error } = await supabase
+    .from("set_transition_locks")
+    .upsert(
+      { project_id: projectId, user_id: userId, from_track_id: fromTrackId, to_track_id: toTrackId },
+      { onConflict: "project_id,from_track_id" }
+    );
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error(
+        "Uma dessas tracks já está travada com outra transição. Remova a trava existente antes."
+      );
+    }
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/app/projetos/${projectId}`);
+}
+
+export async function unlockTransition(formData: FormData) {
+  const { supabase, userId } = await requireAuth();
+
+  const projectId = String(formData.get("project_id") || "");
+  const fromTrackId = String(formData.get("from_track_id") || "");
+
+  if (!projectId || !fromTrackId) {
+    throw new Error("Dados inválidos.");
+  }
+
+  await ensureProjectOwnership(supabase, projectId, userId);
+
+  const { error } = await supabase
+    .from("set_transition_locks")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("from_track_id", fromTrackId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 
   revalidatePath(`/app/projetos/${projectId}`);
 }

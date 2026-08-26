@@ -41,6 +41,109 @@ export type TargetEnergyCurve = [
   number | null
 ];
 
+export type TransitionLock = {
+  fromTrackId: string;
+  toTrackId: string;
+};
+
+/**
+ * Funde unidades de uma track só que estão ligadas por um lock de
+ * transição (fromTrackId -> toTrackId) numa única SequenceUnit, na mesma
+ * lógica que um bloco congelado já usa (múltiplos membros, o algoritmo
+ * move o conjunto como uma peça só). Só considera unidades de UM membro —
+ * uma track já dentro de um bloco não participa de fusão por lock (as
+ * duas ideias não se misturam nessa primeira versão: pra ligar uma track
+ * a um bloco, use o bloco).
+ *
+ * Locks conflitantes (mais de uma cadeia disputando a mesma track) são
+ * ignorados silenciosamente a partir do segundo — a unique constraint no
+ * banco já impede isso na origem, então na prática nunca deveria
+ * acontecer; a checagem aqui é só defesa em profundidade.
+ */
+export function fuseLockedUnits(
+  units: SequenceUnit[],
+  locks: TransitionLock[]
+): SequenceUnit[] {
+  if (locks.length === 0) return units;
+
+  const singleUnitByTrackId = new Map<string, SequenceUnit>();
+  const multiMemberUnits: SequenceUnit[] = [];
+
+  for (const unit of units) {
+    if (unit.members.length === 1) {
+      singleUnitByTrackId.set(unit.entryTrack.id, unit);
+    } else {
+      multiMemberUnits.push(unit);
+    }
+  }
+
+  const nextTrackId = new Map<string, string>();
+  const hasIncoming = new Set<string>();
+
+  for (const lock of locks) {
+    if (lock.fromTrackId === lock.toTrackId) continue;
+    if (!singleUnitByTrackId.has(lock.fromTrackId)) continue;
+    if (!singleUnitByTrackId.has(lock.toTrackId)) continue;
+    if (nextTrackId.has(lock.fromTrackId)) continue;
+    if (hasIncoming.has(lock.toTrackId)) continue;
+
+    nextTrackId.set(lock.fromTrackId, lock.toTrackId);
+    hasIncoming.add(lock.toTrackId);
+  }
+
+  const visited = new Set<string>();
+  const fusedUnits: SequenceUnit[] = [...multiMemberUnits];
+
+  for (const trackId of singleUnitByTrackId.keys()) {
+    if (visited.has(trackId) || hasIncoming.has(trackId)) continue;
+
+    const chain: SequenceUnit[] = [singleUnitByTrackId.get(trackId)!];
+    visited.add(trackId);
+
+    let cursor = trackId;
+    while (nextTrackId.has(cursor)) {
+      const next = nextTrackId.get(cursor)!;
+      if (visited.has(next)) break;
+      chain.push(singleUnitByTrackId.get(next)!);
+      visited.add(next);
+      cursor = next;
+    }
+
+    if (chain.length === 1) {
+      fusedUnits.push(chain[0]);
+      continue;
+    }
+
+    const first = chain[0];
+    const last = chain[chain.length - 1];
+    fusedUnits.push({
+      key: `locked-chain:${chain.map((u) => u.key).join(",")}`,
+      entryTrack: first.entryTrack,
+      exitTrack: last.exitTrack,
+      entryContext: first.entryContext,
+      exitContext: last.exitContext,
+      members: chain.flatMap((u) => u.members),
+    });
+  }
+
+  // Rede de segurança: um ciclo (A->B e B->A, ou uma cadeia mais longa
+  // que fecha em si mesma) faz com que nenhuma das tracks envolvidas
+  // tenha "hasIncoming" vazio, então nenhuma delas nunca é escolhida como
+  // cabeça de cadeia no loop acima — sem essa rede, elas simplesmente
+  // desapareceriam da saída (perda de dados). As locks unique no banco
+  // não impedem ciclos de mais de 1 aresta, então isso é alcançável na
+  // prática, não só teoricamente. Qualquer track ainda não visitada aqui
+  // volta como unidade solta (a trava correspondente é ignorada nesse
+  // caso, mas a track nunca some do set).
+  for (const [trackId, unit] of singleUnitByTrackId) {
+    if (!visited.has(trackId)) {
+      fusedUnits.push(unit);
+    }
+  }
+
+  return fusedUnits;
+}
+
 const FATIGUE_WINDOW = 3;
 const ARTIST_FATIGUE_PENALTY = 15;
 const KEY_FATIGUE_PENALTY = 8;

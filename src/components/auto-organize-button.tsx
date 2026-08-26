@@ -28,6 +28,11 @@ export function AutoOrganizeButton({ projectId }: { projectId: string }) {
             `${result.blockCount} bloco(s) congelado(s) preservado(s)`
           );
         }
+        if (result.lockedChainCount > 0) {
+          parts.push(
+            `${result.lockedChainCount} transição(ões) travada(s) respeitada(s)`
+          );
+        }
 
         setMessage(`Tracklist reorganizada: ${parts.join(", ")}.`);
         setConfirming(false);

@@ -30,9 +30,11 @@ import {
   approveCandidateToTracklist,
   createFrozenBlock,
   dissolveFrozenBlock,
+  lockTransition,
   moveEntityDown,
   moveEntityUp,
   removeFromTracklist,
+  unlockTransition,
   updateCuratorialFields,
 } from "./actions";
 import {
@@ -299,6 +301,7 @@ function TransitionScoreCard({
   toTrackId,
   decision,
   bridgeSuggestions,
+  isLocked,
 }: {
   score: TransitionScore | null;
   projectId?: string;
@@ -306,6 +309,7 @@ function TransitionScoreCard({
   toTrackId?: string;
   decision?: TransitionDecision | null;
   bridgeSuggestions?: BridgeSuggestionTrack[];
+  isLocked?: boolean;
 }) {
   if (!score) return null;
 
@@ -323,6 +327,14 @@ function TransitionScoreCard({
           </div>
 
           <div className="flex items-center gap-2">
+            {isLocked ? (
+              <span
+                title="Essa transição está travada: o auto-organize sempre mantém essas duas tracks adjacentes, nessa ordem."
+                className="rounded-full border border-amber-300/40 px-2 py-0.5 text-[11px] font-bold text-amber-200"
+              >
+                🔒 travada
+              </span>
+            ) : null}
             {decision ? (
               <span
                 className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${
@@ -388,6 +400,27 @@ function TransitionScoreCard({
             toTrackId={toTrackId}
             decision={decision ?? null}
           />
+        ) : null}
+
+        {projectId && fromTrackId && toTrackId ? (
+          <form
+            action={isLocked ? unlockTransition : lockTransition}
+            className="mt-3"
+          >
+            <input type="hidden" name="project_id" value={projectId} />
+            <input type="hidden" name="from_track_id" value={fromTrackId} />
+            {isLocked ? null : (
+              <input type="hidden" name="to_track_id" value={toTrackId} />
+            )}
+            <button
+              type="submit"
+              className="rounded-lg border border-current/20 px-3 py-1.5 text-xs font-bold transition hover:bg-claude-surface/30"
+            >
+              {isLocked
+                ? "🔓 Destravar transição"
+                : "🔒 Travar esta transição no auto-organize"}
+            </button>
+          </form>
         ) : null}
 
         {projectId && bridgeSuggestions && bridgeSuggestions.length > 0 ? (
@@ -579,6 +612,23 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
   ): TransitionDecision | null {
     if (!fromTrackId || !toTrackId) return null;
     return transitionDecisionByTrackPair.get(`${fromTrackId}:${toTrackId}`) ?? null;
+  }
+
+  const { data: transitionLockRows } = await supabase
+    .from("set_transition_locks")
+    .select("from_track_id, to_track_id")
+    .eq("project_id", id);
+
+  const lockedTransitions = new Set(
+    (transitionLockRows ?? []).map((row) => `${row.from_track_id}:${row.to_track_id}`)
+  );
+
+  function isTransitionLocked(
+    fromTrackId: string | undefined,
+    toTrackId: string | undefined
+  ): boolean {
+    if (!fromTrackId || !toTrackId) return false;
+    return lockedTransitions.has(`${fromTrackId}:${toTrackId}`);
   }
 
   const scoringWeights: ScoringWeights | undefined = normalizeScoringWeights(
@@ -1320,6 +1370,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                   fromTrackId={track.id}
                                   toTrackId={nextTrack?.id}
                                   decision={getTransitionDecision(track.id, nextTrack?.id)}
+                                  isLocked={isTransitionLocked(track.id, nextTrack?.id)}
                                   bridgeSuggestions={
                                     nextTrack &&
                                     transitionScore &&
@@ -1471,6 +1522,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                         fromTrackId={track.id}
                         toTrackId={nextTrack?.id}
                         decision={getTransitionDecision(track.id, nextTrack?.id)}
+                        isLocked={isTransitionLocked(track.id, nextTrack?.id)}
                         bridgeSuggestions={
                           nextTrack &&
                           transitionScore &&
