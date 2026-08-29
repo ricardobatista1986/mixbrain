@@ -1249,10 +1249,40 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                   const isLast = index === groupedItems.length - 1;
 
                   if (group.isBlock) {
+                    const lastMemberItem = group.items[group.items.length - 1];
+                    const lastTrack = getTrackFromRelation(lastMemberItem?.tracks);
+                    const nextGroupAfterBlock = groupedItems[index + 1];
+
+                    let afterBlockTrack: ScoreTrack | null = null;
+                    let afterBlockContext: ScoreTracklistItemContext | null = null;
+                    let afterBlockItem: TracklistItem | null = null;
+
+                    if (nextGroupAfterBlock?.isBlock) {
+                      afterBlockItem = nextGroupAfterBlock.items[0];
+                      afterBlockTrack = getTrackFromRelation(afterBlockItem?.tracks);
+                      afterBlockContext = getContextFromItem(afterBlockItem);
+                    } else if (nextGroupAfterBlock && !nextGroupAfterBlock.isBlock) {
+                      afterBlockItem = nextGroupAfterBlock.item;
+                      afterBlockTrack = getTrackFromRelation(afterBlockItem?.tracks);
+                      afterBlockContext = getContextFromItem(afterBlockItem);
+                    }
+
+                    const afterBlockScore =
+                      lastTrack && afterBlockTrack
+                        ? calculateTransitionScore(
+                            lastTrack,
+                            afterBlockTrack,
+                            getContextFromItem(lastMemberItem),
+                            afterBlockContext,
+                            scoringWeights
+                          )
+                        : null;
+
                     return {
                       id: `block-${group.block_id}`,
                       memberIds: group.items.map((item) => item.id),
                       node: (
+                        <>
                       <div
                         key={`block-${group.block_id}`}
                         className="rounded-2xl border-2 border-indigo-500/30 bg-indigo-500/[0.03] p-2 sm:p-4"
@@ -1403,6 +1433,37 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                           })}
                         </div>
                       </div>
+
+                      {lastTrack && afterBlockTrack ? (
+                        <div className="mt-3">
+                          <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-claude-text-faint">
+                            Saída do bloco → próxima track
+                          </p>
+                          <TransitionScoreCard
+                            score={afterBlockScore}
+                            projectId={id}
+                            fromTrackId={lastTrack.id}
+                            toTrackId={afterBlockTrack.id}
+                            decision={getTransitionDecision(lastTrack.id, afterBlockTrack.id)}
+                            isLocked={isTransitionLocked(lastTrack.id, afterBlockTrack.id)}
+                            canCreateLock={false}
+                            bridgeSuggestions={
+                              afterBlockScore &&
+                              (afterBlockScore.label === "Fraca" ||
+                                afterBlockScore.label === "Atenção")
+                                ? computeBridgeSuggestions(
+                                    lastTrack,
+                                    afterBlockTrack,
+                                    bridgePool,
+                                    scoringWeights,
+                                    new Set()
+                                  )
+                                : undefined
+                            }
+                          />
+                        </div>
+                      ) : null}
+                        </>
                       ),
                     };
                   }
