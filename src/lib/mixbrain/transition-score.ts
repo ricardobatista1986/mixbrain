@@ -691,3 +691,58 @@ export function calculateTransitionScore(
     factors,
   };
 }
+
+export type TrackMatch = {
+  track: ScoreTrack;
+  score: TransitionScore;
+  /**
+   * "forward": target -> track é o sentido de maior score (track combina
+   * melhor vindo DEPOIS do alvo). "backward": o sentido inverso combina
+   * melhor (track combina melhor vindo ANTES do alvo). Sem contexto
+   * curatorial (narrativa/momento), o score não é necessariamente
+   * simétrico — harmonia e mood são, mas energia e BPM podem preferir
+   * uma direção. Mostrar o melhor sentido evita descartar um bom
+   * encaixe só porque a direção "óbvia" (target -> track) não é a mais
+   * forte.
+   */
+  direction: "forward" | "backward";
+};
+
+/**
+ * Rankeia as tracks de `pool` pela compatibilidade com `target`, usando o
+ * mesmo cálculo de score exibido em qualquer transição da tracklist —
+ * sem contexto curatorial (não faz sentido fora de uma tracklist real:
+ * não há "momento no set" pra uma pergunta genérica de "o que combina
+ * com essa track"). Calcula os dois sentidos (target->candidata e
+ * candidata->target) e fica com o melhor, já que sem contexto narrativo
+ * o único motivo de uma direção ganhar da outra é energia/BPM.
+ */
+export function rankTrackMatches(
+  target: ScoreTrack,
+  pool: ScoreTrack[],
+  weights?: ScoringWeights,
+  limit = 12
+): TrackMatch[] {
+  const results: TrackMatch[] = [];
+
+  for (const candidate of pool) {
+    if (candidate.id === target.id) continue;
+
+    const forward = calculateTransitionScore(target, candidate, null, null, weights);
+    const backward = calculateTransitionScore(candidate, target, null, null, weights);
+
+    const forwardValue = forward?.finalScore;
+    const backwardValue = backward?.finalScore;
+
+    if (forwardValue == null && backwardValue == null) continue;
+
+    if ((forwardValue ?? -1) >= (backwardValue ?? -1)) {
+      results.push({ track: candidate, score: forward!, direction: "forward" });
+    } else {
+      results.push({ track: candidate, score: backward!, direction: "backward" });
+    }
+  }
+
+  results.sort((a, b) => (b.score.finalScore ?? 0) - (a.score.finalScore ?? 0));
+  return results.slice(0, limit);
+}

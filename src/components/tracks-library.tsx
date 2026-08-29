@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { deleteTrack, updateTrack } from "@/app/app/tracks/actions";
+import { TrackMatchesPanel } from "@/components/track-matches-panel";
 
 export type LibraryTrack = {
   id: string;
@@ -255,6 +256,7 @@ export function TracksLibrary({ tracks }: { tracks: LibraryTrack[] }) {
   const [showFilters, setShowFilters] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("recent");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [matchesForId, setMatchesForId] = useState<string | null>(null);
 
   const availableKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -580,7 +582,7 @@ export function TracksLibrary({ tracks }: { tracks: LibraryTrack[] }) {
             <span className="w-10 shrink-0">Key</span>
             <span className="w-16 shrink-0">Energia</span>
             <span className="w-32 shrink-0">Mood</span>
-            <span className="w-32 shrink-0" />
+            <span className="w-40 shrink-0" />
           </div>
 
           <div className="max-h-[600px] flex-1 overflow-y-auto">
@@ -623,7 +625,17 @@ export function TracksLibrary({ tracks }: { tracks: LibraryTrack[] }) {
                     )}
                   </span>
 
-                  <span className="flex w-32 shrink-0 items-center justify-end gap-3">
+                  <span className="flex w-40 shrink-0 items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMatchesForId((current) => (current === track.id ? null : track.id));
+                      }}
+                      className="text-xs font-semibold text-claude-accent hover:text-claude-accent-hover"
+                    >
+                      {matchesForId === track.id ? "Fechar" : "Encaixes"}
+                    </button>
                     <span className="text-xs font-semibold text-claude-accent">
                       {editingId === track.id ? "Fechar" : "Editar"}
                     </span>
@@ -633,6 +645,15 @@ export function TracksLibrary({ tracks }: { tracks: LibraryTrack[] }) {
 
                 {editingId === track.id ? (
                   <TrackEditForm track={track} onDone={() => setEditingId(null)} />
+                ) : null}
+
+                {matchesForId === track.id ? (
+                  <div className="border-t border-claude-border p-4">
+                    <TrackMatchesPanel
+                      target={track}
+                      pools={[{ label: "Biblioteca inteira", tracks }]}
+                    />
+                  </div>
                 ) : null}
               </div>
             ))}

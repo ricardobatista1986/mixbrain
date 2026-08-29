@@ -17,6 +17,7 @@ import {
 import { CurationTimeline, type CurationEventSummary } from "@/components/curation-timeline";
 import { ScoringWeightsPanel } from "@/components/scoring-weights-panel";
 import { EnergyCurveEditor } from "@/components/energy-curve-editor";
+import { TrackMatchesPanel } from "@/components/track-matches-panel";
 import {
   interpolateTargetEnergy,
   normalizeTargetEnergyCurve,
@@ -885,6 +886,17 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
   }
   const totalTransitions = flatTracklist.length - 1;
 
+  const projectPoolTracksMap = new Map<string, ScoreTrack>();
+  for (const entry of flatTracklist) {
+    projectPoolTracksMap.set(entry.track.id, entry.track);
+  }
+  for (const candidate of pendingCandidates) {
+    const track = getTrackFromRelation(candidate.tracks);
+    if (track) projectPoolTracksMap.set(track.id, track);
+  }
+  const projectPoolTracks = [...projectPoolTracksMap.values()];
+  const fullLibraryTracks = (allTracks ?? []) as ScoreTrack[];
+
   const energyPoints: EnergyPoint[] = groupedItems.flatMap((group) => {
     const items = group.isBlock ? group.items : [group.item];
     return items
@@ -1403,6 +1415,16 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                       </span>
                                     </div>
                                     <CuratorialEditor projectId={id} item={item} />
+                                    <div className="mt-2">
+                                      <TrackMatchesPanel
+                                        target={track}
+                                        pools={[
+                                          { label: "Neste projeto", tracks: projectPoolTracks },
+                                          { label: "Biblioteca inteira", tracks: fullLibraryTracks },
+                                        ]}
+                                        weights={scoringWeights}
+                                      />
+                                    </div>
                                   </details>
                                 </article>
 
@@ -1586,6 +1608,16 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                             </span>
                           </div>
                           <CuratorialEditor projectId={id} item={group.item} />
+                          <div className="mt-2">
+                            <TrackMatchesPanel
+                              target={track}
+                              pools={[
+                                { label: "Neste projeto", tracks: projectPoolTracks },
+                                { label: "Biblioteca inteira", tracks: fullLibraryTracks },
+                              ]}
+                              weights={scoringWeights}
+                            />
+                          </div>
                         </details>
                       </article>
 
