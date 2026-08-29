@@ -346,22 +346,32 @@ function TransitionScoreCard({
       <summary className="cursor-pointer list-none">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-black">
-                Score MixBrain: {score.finalScore === null ? "—" : `${score.finalScore}%`}
-              </p>
+            <p className="text-sm font-black">
+              Score MixBrain: {score.finalScore === null ? "—" : `${score.finalScore}%`}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs opacity-80">
               {harmonicMeta ? (
-                <span title={`${harmonicMeta.label} — ${harmonicMeta.description}`}>
-                  {harmonicMeta.icon}
+                <span title={harmonicMeta.description}>
+                  {harmonicMeta.icon} {harmonicMeta.label}
                 </span>
               ) : null}
               {energyMeta ? (
-                <span title={energyMeta.label}>{energyMeta.icon}</span>
+                <span title={energyMeta.label}>
+                  {energyMeta.icon} {energyMeta.label}
+                </span>
+              ) : null}
+              {!harmonicMeta && !energyMeta ? <span>Para a transição até a próxima track.</span> : null}
+              {projectId && (harmonicMeta || energyMeta) ? (
+                <a
+                  href={`/app/glossario?projeto=${projectId}#relacoes-harmonicas`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline decoration-dotted underline-offset-2 hover:text-claude-accent"
+                >
+                  o que significa?
+                </a>
               ) : null}
             </div>
-            <p className="mt-1 text-xs opacity-80">
-              Para a transição até a próxima track.
-            </p>
           </div>
 
           <div className="flex items-center gap-2">

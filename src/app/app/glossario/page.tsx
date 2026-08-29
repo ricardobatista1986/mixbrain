@@ -1,6 +1,27 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_SCORING_WEIGHTS, normalizeScoringWeights } from "@/lib/mixbrain/transition-score";
+import { HARMONIC_RELATION_META, ENERGY_DIRECTION_META } from "@/lib/mixbrain/camelot";
+
+const HARMONIC_RELATION_ORDER: (keyof typeof HARMONIC_RELATION_META)[] = [
+  "perfect_match",
+  "perfect_boost",
+  "perfect_drop",
+  "energy_boost",
+  "scale_change",
+  "diagonal_mix",
+  "mood_change",
+  "jaws_mix",
+  "incompatible",
+  "missing_data",
+];
+
+const ENERGY_DIRECTION_ORDER: (keyof typeof ENERGY_DIRECTION_META)[] = [
+  "rise",
+  "drop",
+  "stable",
+  "missing_data",
+];
 
 const FACTOR_META: Record<
   keyof typeof DEFAULT_SCORING_WEIGHTS,
@@ -294,6 +315,79 @@ export default async function GlossarioPage({
               </article>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section id="relacoes-harmonicas" className="mx-auto max-w-6xl scroll-mt-24 px-6 py-16 sm:px-10 lg:px-12">
+        <div className="max-w-3xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-claude-accent">
+            Ícones de cada transição
+          </p>
+          <h2 className="mt-3 text-3xl font-black tracking-tight">
+            Relação harmônica e direção de energia
+          </h2>
+          <p className="mt-4 leading-7 text-claude-text-muted">
+            Cada transição na tracklist mostra dois ícones: a relação harmônica
+            entre as keys (baseada no Camelot Wheel) e a direção da energia. São
+            só um resumo visual — o score continua sendo calculado pelos 7
+            fatores acima, esses ícones só ajudam a ler a evolução do set num
+            relance sem abrir cada card.
+          </p>
+          <p className="mt-3 text-xs leading-6 text-claude-text-faint">
+            As 8 categorias harmônicas seguem a documentação oficial do
+            DJ.Studio (Harmonize/Automix), cada uma um intervalo musical exato
+            no círculo de quintas — não são uma aproximação visual.
+          </p>
+        </div>
+
+        <div className="mt-10">
+          <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-claude-text-muted">
+            Relação harmônica (key)
+          </h3>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {HARMONIC_RELATION_ORDER.map((key) => {
+              const meta = HARMONIC_RELATION_META[key];
+              return (
+                <article
+                  key={key}
+                  className="flex items-start gap-3 rounded-xl border border-claude-border bg-claude-surface p-4"
+                >
+                  <span className="text-xl leading-none">{meta.icon}</span>
+                  <div>
+                    <p className="font-bold">{meta.label}</p>
+                    <p className="mt-1 text-sm leading-6 text-claude-text-muted">
+                      {meta.description}
+                    </p>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-10">
+          <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-claude-text-muted">
+            Direção de energia
+          </h3>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {ENERGY_DIRECTION_ORDER.map((key) => {
+              const meta = ENERGY_DIRECTION_META[key];
+              return (
+                <article
+                  key={key}
+                  className="flex items-center gap-3 rounded-xl border border-claude-border bg-claude-surface p-4"
+                >
+                  <span className="text-xl leading-none">{meta.icon}</span>
+                  <p className="font-bold">{meta.label}</p>
+                </article>
+              );
+            })}
+          </div>
+          <p className="mt-4 text-xs leading-6 text-claude-text-faint">
+            Limiar de 2 pontos (escala 1–10): variações menores que isso contam
+            como estável, pra não marcar toda variação natural de energia como
+            subida ou queda.
+          </p>
         </div>
       </section>
 
