@@ -19,6 +19,14 @@ import { ScoringWeightsPanel } from "@/components/scoring-weights-panel";
 import { EnergyCurveEditor } from "@/components/energy-curve-editor";
 import { TrackMatchesPanel } from "@/components/track-matches-panel";
 import {
+  HARMONIC_RELATION_META,
+  ENERGY_DIRECTION_META,
+  classifyHarmonicRelation,
+  classifyEnergyDirection,
+  type HarmonicRelation,
+  type EnergyDirection,
+} from "@/lib/mixbrain/camelot";
+import {
   interpolateTargetEnergy,
   normalizeTargetEnergyCurve,
 } from "@/lib/mixbrain/auto-sequence";
@@ -304,6 +312,8 @@ function TransitionScoreCard({
   bridgeSuggestions,
   isLocked,
   canCreateLock = true,
+  harmonicRelation,
+  energyDirection,
 }: {
   score: TransitionScore | null;
   projectId?: string;
@@ -323,17 +333,32 @@ function TransitionScoreCard({
    * que ficou "presa" depois que a track virou membro de um bloco.
    */
   canCreateLock?: boolean;
+  harmonicRelation?: HarmonicRelation;
+  energyDirection?: EnergyDirection;
 }) {
   if (!score) return null;
+
+  const harmonicMeta = harmonicRelation ? HARMONIC_RELATION_META[harmonicRelation] : null;
+  const energyMeta = energyDirection ? ENERGY_DIRECTION_META[energyDirection] : null;
 
   return (
     <details className={`rounded-xl border p-3 ${getScoreToneClasses(score)}`}>
       <summary className="cursor-pointer list-none">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-black">
-              Score MixBrain: {score.finalScore === null ? "—" : `${score.finalScore}%`}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-black">
+                Score MixBrain: {score.finalScore === null ? "—" : `${score.finalScore}%`}
+              </p>
+              {harmonicMeta ? (
+                <span title={`${harmonicMeta.label} — ${harmonicMeta.description}`}>
+                  {harmonicMeta.icon}
+                </span>
+              ) : null}
+              {energyMeta ? (
+                <span title={energyMeta.label}>{energyMeta.icon}</span>
+              ) : null}
+            </div>
             <p className="mt-1 text-xs opacity-80">
               Para a transição até a próxima track.
             </p>
@@ -895,6 +920,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
     if (track) projectPoolTracksMap.set(track.id, track);
   }
   const projectPoolTracks = [...projectPoolTracksMap.values()];
+  const projectPoolTrackIds = new Set(projectPoolTracks.map((track) => track.id));
   const fullLibraryTracks = (allTracks ?? []) as ScoreTrack[];
 
   const energyPoints: EnergyPoint[] = groupedItems.flatMap((group) => {
@@ -1423,6 +1449,8 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                           { label: "Biblioteca inteira", tracks: fullLibraryTracks },
                                         ]}
                                         weights={scoringWeights}
+                                        projectId={id}
+                                        existingProjectTrackIds={projectPoolTrackIds}
                                       />
                                     </div>
                                   </details>
@@ -1435,6 +1463,14 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                   toTrackId={nextTrack?.id}
                                   decision={getTransitionDecision(track.id, nextTrack?.id)}
                                   isLocked={isTransitionLocked(track.id, nextTrack?.id)}
+                                  harmonicRelation={classifyHarmonicRelation(
+                                    track.musical_key,
+                                    nextTrack?.musical_key
+                                  )}
+                                  energyDirection={classifyEnergyDirection(
+                                    track.energy,
+                                    nextTrack?.energy
+                                  )}
                                   bridgeSuggestions={
                                     nextTrack &&
                                     transitionScore &&
@@ -1469,6 +1505,14 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                             decision={getTransitionDecision(lastTrack.id, afterBlockTrack.id)}
                             isLocked={isTransitionLocked(lastTrack.id, afterBlockTrack.id)}
                             canCreateLock={false}
+                            harmonicRelation={classifyHarmonicRelation(
+                              lastTrack.musical_key,
+                              afterBlockTrack.musical_key
+                            )}
+                            energyDirection={classifyEnergyDirection(
+                              lastTrack.energy,
+                              afterBlockTrack.energy
+                            )}
                             bridgeSuggestions={
                               afterBlockScore &&
                               (afterBlockScore.label === "Fraca" ||
@@ -1616,6 +1660,8 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                                 { label: "Biblioteca inteira", tracks: fullLibraryTracks },
                               ]}
                               weights={scoringWeights}
+                              projectId={id}
+                              existingProjectTrackIds={projectPoolTrackIds}
                             />
                           </div>
                         </details>
@@ -1629,6 +1675,11 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                         decision={getTransitionDecision(track.id, nextTrack?.id)}
                         isLocked={isTransitionLocked(track.id, nextTrack?.id)}
                         canCreateLock={!nextGroup?.isBlock}
+                        harmonicRelation={classifyHarmonicRelation(
+                          track.musical_key,
+                          nextTrack?.musical_key
+                        )}
+                        energyDirection={classifyEnergyDirection(track.energy, nextTrack?.energy)}
                         bridgeSuggestions={
                           nextTrack &&
                           transitionScore &&
