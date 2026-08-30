@@ -125,7 +125,7 @@ export function TrackMatchesPanel({
               ENERGY_DIRECTION_META[classifyEnergyDirection(fromTrack.energy, toTrack.energy)];
 
             return (
-              <div key={match.track.id} className="flex items-center gap-3 py-2">
+              <div key={match.track.id} className="flex items-start gap-3 py-2">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-claude-text">
                     {match.track.title}
@@ -133,6 +133,11 @@ export function TrackMatchesPanel({
                   <p className="truncate text-xs text-claude-text-muted">
                     {match.track.artist || "Artista não informado"}
                     {match.direction === "backward" ? " · melhor entrando antes" : ""}
+                  </p>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-claude-text-faint">
+                    <span>{match.track.bpm ? `${match.track.bpm} BPM` : "BPM —"}</span>
+                    <span>{match.track.musical_key ?? "Key —"}</span>
+                    <span>{match.track.energy ? `E${match.track.energy}` : "E —"}</span>
                   </p>
                   <p className="mt-0.5 truncate text-[11px] text-claude-text-faint">
                     <span title={harmonicMeta.description}>
