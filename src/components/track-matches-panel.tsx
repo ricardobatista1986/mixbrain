@@ -51,7 +51,7 @@ export function TrackMatchesPanel({
   const [addError, setAddError] = useState<string | null>(null);
 
   const matches = useMemo(
-    () => rankTrackMatches(target, activePool?.tracks ?? [], weights, 12),
+    () => rankTrackMatches(target, activePool?.tracks ?? [], weights, 20),
     [target, activePool, weights]
   );
 
