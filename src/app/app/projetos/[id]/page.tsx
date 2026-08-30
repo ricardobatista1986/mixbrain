@@ -18,6 +18,7 @@ import { CurationTimeline, type CurationEventSummary } from "@/components/curati
 import { ScoringWeightsPanel } from "@/components/scoring-weights-panel";
 import { EnergyCurveEditor } from "@/components/energy-curve-editor";
 import { TrackMatchesPanel } from "@/components/track-matches-panel";
+import { RejectCandidateButton } from "@/components/reject-candidate-button";
 import {
   HARMONIC_RELATION_META,
   ENERGY_DIRECTION_META,
@@ -1150,17 +1151,21 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                           </p>
                         </div>
 
-                        <form action={approveCandidateToTracklist}>
-                          <input type="hidden" name="project_id" value={id} />
-                          <input type="hidden" name="track_id" value={track.id} />
+                        <div className="flex shrink-0 items-start gap-2">
+                          <form action={approveCandidateToTracklist}>
+                            <input type="hidden" name="project_id" value={id} />
+                            <input type="hidden" name="track_id" value={track.id} />
 
-                          <button
-                            type="submit"
-                            className="rounded-full bg-claude-accent px-4 py-2 text-sm font-bold text-claude-bg hover:opacity-90"
-                          >
-                            Aprovar
-                          </button>
-                        </form>
+                            <button
+                              type="submit"
+                              className="rounded-full bg-claude-accent px-4 py-2 text-sm font-bold text-claude-bg hover:opacity-90"
+                            >
+                              Aprovar
+                            </button>
+                          </form>
+
+                          <RejectCandidateButton projectId={id} candidateId={candidate.id} />
+                        </div>
                       </div>
 
                       <div className="mt-4 flex flex-wrap gap-2 text-xs text-claude-text-muted">
