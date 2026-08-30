@@ -553,13 +553,13 @@ function getTimingFactor(
 export type ScoringWeights = Partial<Record<ScoreFactor["id"], number>>;
 
 export const DEFAULT_SCORING_WEIGHTS: Record<ScoreFactor["id"], number> = {
-  narrative: 28,
-  timing: 22,
-  harmony: 16,
-  energy: 13,
-  mood: 9,
-  bpm: 7,
-  diversity: 5,
+  narrative: 0,
+  timing: 0,
+  harmony: 32,
+  energy: 26,
+  mood: 18,
+  bpm: 14,
+  diversity: 10,
 };
 
 /**
@@ -623,20 +623,28 @@ export function calculateTransitionScore(
     getDiversityFactor(currentTrack, nextTrack),
   ];
 
-  // Pesos customizados por projeto substituem o peso oficial de cada fator
-  // (mas não mudam se o fator está disponível ou não — isso continua vindo
-  // dos dados reais das tracks).
-  const factors: ScoreFactor[] = customWeights
-    ? rawFactors.map((factor) => {
-        const override = customWeights[factor.id];
-        if (override === undefined) return factor;
-        return {
-          ...factor,
-          officialWeight: override,
-          effectiveWeight: factor.status === "available" ? override : 0,
-        };
-      })
-    : rawFactors;
+  // Peso efetivo de cada fator: DEFAULT_SCORING_WEIGHTS é a única fonte de
+  // verdade dos pesos-padrão, sobrescrita por customWeights quando o
+  // projeto tiver pesos salvos. O officialWeight retornado por cada
+  // getXFactor (28/22/16/13/9/7/5 do plano original) é só um placeholder
+  // interno — sempre substituído aqui, nunca usado como peso de fato. Antes
+  // esse merge só rodava quando customWeights existia; mudar
+  // DEFAULT_SCORING_WEIGHTS sozinho não tinha nenhum efeito real no cálculo
+  // pra projetos sem peso salvo, porque caíam direto no officialWeight
+  // hardcoded de cada função — bug latente, não só uma limpeza cosmética.
+  const effectiveWeights: Record<ScoreFactor["id"], number> = {
+    ...DEFAULT_SCORING_WEIGHTS,
+    ...customWeights,
+  };
+
+  const factors: ScoreFactor[] = rawFactors.map((factor) => {
+    const weight = effectiveWeights[factor.id];
+    return {
+      ...factor,
+      officialWeight: weight,
+      effectiveWeight: factor.status === "available" ? weight : 0,
+    };
+  });
 
   const availableFactors = factors.filter(
     (factor) => factor.status === "available" && factor.score !== null

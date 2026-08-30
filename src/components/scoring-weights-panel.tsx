@@ -25,8 +25,8 @@ type WeightPreset = {
 const WEIGHT_PRESETS: WeightPreset[] = [
   {
     id: "default",
-    label: "Padrão (narrativa)",
-    description: "O critério padrão do MixBrain: a história do set manda, harmonia e energia dão suporte.",
+    label: "Padrão",
+    description: "O critério padrão do MixBrain: harmonia e energia no comando, sem precisar marcar momento curatorial em nada.",
     weights: { ...DEFAULT_SCORING_WEIGHTS },
   },
   {
