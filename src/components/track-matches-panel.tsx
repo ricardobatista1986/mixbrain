@@ -13,6 +13,8 @@ import {
   classifyEnergyDirection,
   HARMONIC_RELATION_META,
   ENERGY_DIRECTION_META,
+  type HarmonicRelation,
+  type EnergyDirection,
 } from "@/lib/mixbrain/camelot";
 
 export type MatchPool = {
@@ -27,6 +29,24 @@ const TONE_CLASSES: Record<string, string> = {
   rose: "border-rose-400/30 bg-rose-400/10 text-rose-300",
   slate: "border-claude-border text-claude-text-muted",
 };
+
+// "missing_data" e "incompatible" ficam de fora dos chips de filtro: não são
+// tipos de transição que alguém escolhe deliberadamente pra conduzir o set,
+// são a ausência de uma relação boa.
+const FILTERABLE_HARMONIC_RELATIONS: HarmonicRelation[] = [
+  "perfect_match",
+  "perfect_boost",
+  "perfect_drop",
+  "energy_boost",
+  "scale_change",
+  "diagonal_mix",
+  "mood_change",
+  "jaws_mix",
+];
+
+const FILTERABLE_ENERGY_DIRECTIONS: EnergyDirection[] = ["rise", "drop", "stable"];
+
+const RESULTS_LIMIT = 20;
 
 export function TrackMatchesPanel({
   target,
@@ -49,11 +69,62 @@ export function TrackMatchesPanel({
   const [isPending, startTransition] = useTransition();
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [addError, setAddError] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [harmonicFilter, setHarmonicFilter] = useState<Set<HarmonicRelation>>(new Set());
+  const [energyFilter, setEnergyFilter] = useState<Set<EnergyDirection>>(new Set());
 
-  const matches = useMemo(
-    () => rankTrackMatches(target, activePool?.tracks ?? [], weights, 20),
-    [target, activePool, weights]
-  );
+  // Rankeia contra o pool inteiro (sem cortar em 20 ainda) e já classifica
+  // harmonia/energia de cada match, respeitando a direção real (forward:
+  // target->match; backward: match->target rende mais score, então a
+  // relação é calculada nesse sentido invertido).
+  const rankedWithMeta = useMemo(() => {
+    const pool = activePool?.tracks ?? [];
+    const ranked = rankTrackMatches(target, pool, weights, Math.max(pool.length, 1));
+
+    return ranked.map((match) => {
+      const fromTrack = match.direction === "forward" ? target : match.track;
+      const toTrack = match.direction === "forward" ? match.track : target;
+      const harmonicRelation = classifyHarmonicRelation(
+        fromTrack.musical_key,
+        toTrack.musical_key
+      );
+      const energyDirection = classifyEnergyDirection(fromTrack.energy, toTrack.energy);
+      return { ...match, harmonicRelation, energyDirection };
+    });
+  }, [target, activePool, weights]);
+
+  // Filtra ANTES de cortar em 20 — senão um filtro por "Energy Boost"
+  // esconderia a melhor opção desse tipo se ela não estivesse entre as 20
+  // melhores em score geral. Filtro vazio (nenhum chip selecionado) = sem
+  // filtro nessa dimensão.
+  const filteredMatches = useMemo(() => {
+    return rankedWithMeta.filter((match) => {
+      if (harmonicFilter.size > 0 && !harmonicFilter.has(match.harmonicRelation)) return false;
+      if (energyFilter.size > 0 && !energyFilter.has(match.energyDirection)) return false;
+      return true;
+    });
+  }, [rankedWithMeta, harmonicFilter, energyFilter]);
+
+  const matches = filteredMatches.slice(0, RESULTS_LIMIT);
+  const isFiltered = harmonicFilter.size > 0 || energyFilter.size > 0;
+
+  function toggleHarmonic(relation: HarmonicRelation) {
+    setHarmonicFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(relation)) next.delete(relation);
+      else next.add(relation);
+      return next;
+    });
+  }
+
+  function toggleEnergy(direction: EnergyDirection) {
+    setEnergyFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(direction)) next.delete(direction);
+      else next.add(direction);
+      return next;
+    });
+  }
 
   function handleAdd(trackId: string) {
     if (!projectId) return;
@@ -96,33 +167,96 @@ export function TrackMatchesPanel({
         ) : null}
       </div>
 
+      <button
+        type="button"
+        onClick={() => setShowFilters((prev) => !prev)}
+        className="mt-2 text-[11px] font-semibold text-claude-accent hover:text-claude-accent-hover"
+      >
+        {showFilters ? "▾" : "▸"} Filtrar por tipo de transição
+        {isFiltered
+          ? ` (${harmonicFilter.size + energyFilter.size} ativo${
+              harmonicFilter.size + energyFilter.size === 1 ? "" : "s"
+            })`
+          : ""}
+      </button>
+
+      {showFilters ? (
+        <div className="mt-2 space-y-2 rounded-lg border border-claude-border bg-claude-surface/40 p-2.5">
+          <div className="flex flex-wrap gap-1.5">
+            {FILTERABLE_HARMONIC_RELATIONS.map((relation) => {
+              const meta = HARMONIC_RELATION_META[relation];
+              const active = harmonicFilter.has(relation);
+              return (
+                <button
+                  key={relation}
+                  type="button"
+                  title={meta.description}
+                  onClick={() => toggleHarmonic(relation)}
+                  className={`rounded-full border px-2 py-1 text-[11px] font-semibold transition ${
+                    active
+                      ? "border-claude-accent bg-claude-accent/15 text-claude-accent"
+                      : "border-claude-border text-claude-text-muted hover:border-claude-accent/40"
+                  }`}
+                >
+                  {meta.icon} {meta.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap gap-1.5 border-t border-claude-border pt-2">
+            {FILTERABLE_ENERGY_DIRECTIONS.map((direction) => {
+              const meta = ENERGY_DIRECTION_META[direction];
+              const active = energyFilter.has(direction);
+              return (
+                <button
+                  key={direction}
+                  type="button"
+                  onClick={() => toggleEnergy(direction)}
+                  className={`rounded-full border px-2 py-1 text-[11px] font-semibold transition ${
+                    active
+                      ? "border-claude-accent bg-claude-accent/15 text-claude-accent"
+                      : "border-claude-border text-claude-text-muted hover:border-claude-accent/40"
+                  }`}
+                >
+                  {meta.icon} {meta.label}
+                </button>
+              );
+            })}
+          </div>
+          {isFiltered ? (
+            <button
+              type="button"
+              onClick={() => {
+                setHarmonicFilter(new Set());
+                setEnergyFilter(new Set());
+              }}
+              className="text-[11px] font-semibold text-claude-text-muted underline hover:text-claude-accent"
+            >
+              Limpar filtros
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       {addError ? (
         <p className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300">
           {addError}
         </p>
       ) : null}
 
-      {matches.length === 0 ? (
+      {filteredMatches.length === 0 ? (
         <p className="mt-3 text-xs text-claude-text-muted">
-          Nenhuma outra track com dados suficientes pra comparar em &quot;{activePool?.label}&quot;.
+          {isFiltered
+            ? `Nenhuma track em "${activePool?.label}" bate com esse filtro.`
+            : `Nenhuma outra track com dados suficientes pra comparar em "${activePool?.label}".`}
         </p>
       ) : (
         <div className="mt-2 divide-y divide-claude-border">
           {matches.map((match) => {
             const alreadyInProject =
               existingProjectTrackIds?.has(match.track.id) || addedIds.has(match.track.id);
-
-            // Respeita a direção real do match: se "backward" (match antes
-            // do alvo), a relação harmônica/energia é calculada nesse
-            // sentido — senão o ícone mostraria a leitura errada.
-            const fromTrack = match.direction === "forward" ? target : match.track;
-            const toTrack = match.direction === "forward" ? match.track : target;
-            const harmonicMeta =
-              HARMONIC_RELATION_META[
-                classifyHarmonicRelation(fromTrack.musical_key, toTrack.musical_key)
-              ];
-            const energyMeta =
-              ENERGY_DIRECTION_META[classifyEnergyDirection(fromTrack.energy, toTrack.energy)];
+            const harmonicMeta = HARMONIC_RELATION_META[match.harmonicRelation];
+            const energyMeta = ENERGY_DIRECTION_META[match.energyDirection];
 
             return (
               <div key={match.track.id} className="flex items-start gap-3 py-2">
@@ -179,6 +313,12 @@ export function TrackMatchesPanel({
           })}
         </div>
       )}
+
+      {filteredMatches.length > RESULTS_LIMIT ? (
+        <p className="mt-2 text-[11px] text-claude-text-faint">
+          Mostrando as {RESULTS_LIMIT} melhores de {filteredMatches.length} que batem com o filtro.
+        </p>
+      ) : null}
 
       <p className="mt-2 text-[11px] text-claude-text-faint">
         Sem contexto de narrativa/momento no set — considera harmonia, energia,
