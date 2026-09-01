@@ -349,7 +349,10 @@ export function TrackMatchesPanel({
 
       <p className="mt-2 text-[11px] text-claude-text-faint">
         Sem contexto de narrativa/momento no set — considera harmonia, energia,
-        BPM, mood e diversidade.
+        BPM, mood e diversidade. O % é o mesmo em qualquer direção; a ordem
+        muda porque {direction === "after" ? "\"depois\"" : "\"antes\""} dá
+        uma leve preferência a quem {direction === "after" ? "mantém ou sobe" : "mantém ou desce"}{" "}
+        a energia em relação a {target.title}.
       </p>
     </div>
   );
