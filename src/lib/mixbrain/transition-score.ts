@@ -700,55 +700,58 @@ export function calculateTransitionScore(
   };
 }
 
+export type MatchDirection = "after" | "before";
+
 export type TrackMatch = {
   track: ScoreTrack;
   score: TransitionScore;
   /**
-   * "forward": target -> track é o sentido de maior score (track combina
-   * melhor vindo DEPOIS do alvo). "backward": o sentido inverso combina
-   * melhor (track combina melhor vindo ANTES do alvo). Sem contexto
-   * curatorial (narrativa/momento), o score não é necessariamente
-   * simétrico — harmonia e mood são, mas energia e BPM podem preferir
-   * uma direção. Mostrar o melhor sentido evita descartar um bom
-   * encaixe só porque a direção "óbvia" (target -> track) não é a mais
-   * forte.
+   * "after": a track do match entra DEPOIS do alvo (target -> track).
+   * "before": a track do match entra ANTES do alvo (track -> target).
+   * Reflete o parâmetro `direction` pedido a rankTrackMatches — todo
+   * match de uma mesma chamada tem a mesma direção, são duas perguntas
+   * distintas ("o que combina depois desta track" vs "o que combina
+   * antes desta track"), não uma mistura automática das duas.
    */
-  direction: "forward" | "backward";
+  direction: MatchDirection;
 };
 
 /**
- * Rankeia as tracks de `pool` pela compatibilidade com `target`, usando o
- * mesmo cálculo de score exibido em qualquer transição da tracklist —
- * sem contexto curatorial (não faz sentido fora de uma tracklist real:
- * não há "momento no set" pra uma pergunta genérica de "o que combina
- * com essa track"). Calcula os dois sentidos (target->candidata e
- * candidata->target) e fica com o melhor, já que sem contexto narrativo
- * o único motivo de uma direção ganhar da outra é energia/BPM.
+ * Rankeia as tracks de `pool` pela compatibilidade com `target` NUM
+ * SENTIDO ESPECÍFICO — usando o mesmo cálculo de score exibido em
+ * qualquer transição da tracklist, sem contexto curatorial (não faz
+ * sentido fora de uma tracklist real: não há "momento no set" pra uma
+ * pergunta genérica de "o que combina com essa track").
+ *
+ * `direction: "after"` responde "o que soa bem TOCANDO DEPOIS de
+ * `target`" (score de target -> candidata). `direction: "before"`
+ * responde "o que soa bem TOCANDO ANTES de `target`" (score de
+ * candidata -> target). São duas perguntas diferentes, não a mesma
+ * pergunta com o rótulo invertido — sem contexto narrativo o score pode
+ * favorecer uma direção sobre a outra (energia/BPM não são simétricos),
+ * então os resultados de "depois" e "antes" para a mesma track podem
+ * ser bem diferentes.
  */
 export function rankTrackMatches(
   target: ScoreTrack,
   pool: ScoreTrack[],
   weights?: ScoringWeights,
-  limit = 12
+  limit = 12,
+  direction: MatchDirection = "after"
 ): TrackMatch[] {
   const results: TrackMatch[] = [];
 
   for (const candidate of pool) {
     if (candidate.id === target.id) continue;
 
-    const forward = calculateTransitionScore(target, candidate, null, null, weights);
-    const backward = calculateTransitionScore(candidate, target, null, null, weights);
+    const score =
+      direction === "after"
+        ? calculateTransitionScore(target, candidate, null, null, weights)
+        : calculateTransitionScore(candidate, target, null, null, weights);
 
-    const forwardValue = forward?.finalScore;
-    const backwardValue = backward?.finalScore;
+    if (score?.finalScore == null) continue;
 
-    if (forwardValue == null && backwardValue == null) continue;
-
-    if ((forwardValue ?? -1) >= (backwardValue ?? -1)) {
-      results.push({ track: candidate, score: forward!, direction: "forward" });
-    } else {
-      results.push({ track: candidate, score: backward!, direction: "backward" });
-    }
+    results.push({ track: candidate, score, direction });
   }
 
   results.sort((a, b) => (b.score.finalScore ?? 0) - (a.score.finalScore ?? 0));

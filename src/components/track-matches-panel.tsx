@@ -7,6 +7,7 @@ import {
   rankTrackMatches,
   type ScoreTrack,
   type ScoringWeights,
+  type MatchDirection,
 } from "@/lib/mixbrain/transition-score";
 import {
   classifyHarmonicRelation,
@@ -72,18 +73,20 @@ export function TrackMatchesPanel({
   const [showFilters, setShowFilters] = useState(false);
   const [harmonicFilter, setHarmonicFilter] = useState<Set<HarmonicRelation>>(new Set());
   const [energyFilter, setEnergyFilter] = useState<Set<EnergyDirection>>(new Set());
+  const [direction, setDirection] = useState<MatchDirection>("after");
 
   // Rankeia contra o pool inteiro (sem cortar em 20 ainda) e já classifica
-  // harmonia/energia de cada match, respeitando a direção real (forward:
-  // target->match; backward: match->target rende mais score, então a
-  // relação é calculada nesse sentido invertido).
+  // harmonia/energia de cada match. `direction` é uma escolha explícita do
+  // usuário ("o que combina DEPOIS desta track" vs "o que combina ANTES
+  // desta track") — duas perguntas distintas, não uma mistura automática
+  // dos dois sentidos.
   const rankedWithMeta = useMemo(() => {
     const pool = activePool?.tracks ?? [];
-    const ranked = rankTrackMatches(target, pool, weights, Math.max(pool.length, 1));
+    const ranked = rankTrackMatches(target, pool, weights, Math.max(pool.length, 1), direction);
 
     return ranked.map((match) => {
-      const fromTrack = match.direction === "forward" ? target : match.track;
-      const toTrack = match.direction === "forward" ? match.track : target;
+      const fromTrack = direction === "after" ? target : match.track;
+      const toTrack = direction === "after" ? match.track : target;
       const harmonicRelation = classifyHarmonicRelation(
         fromTrack.musical_key,
         toTrack.musical_key
@@ -91,7 +94,7 @@ export function TrackMatchesPanel({
       const energyDirection = classifyEnergyDirection(fromTrack.energy, toTrack.energy);
       return { ...match, harmonicRelation, energyDirection };
     });
-  }, [target, activePool, weights]);
+  }, [target, activePool, weights, direction]);
 
   // Filtra ANTES de cortar em 20 — senão um filtro por "Energy Boost"
   // esconderia a melhor opção desse tipo se ela não estivesse entre as 20
@@ -165,6 +168,31 @@ export function TrackMatchesPanel({
             ))}
           </div>
         ) : null}
+      </div>
+
+      <div className="mt-2 flex gap-1 rounded-full border border-claude-border bg-claude-surface/40 p-1">
+        <button
+          type="button"
+          onClick={() => setDirection("after")}
+          className={`flex-1 rounded-full px-3 py-1.5 text-xs font-bold transition ${
+            direction === "after"
+              ? "bg-claude-accent text-claude-bg"
+              : "text-claude-text-muted hover:text-claude-text"
+          }`}
+        >
+          Toca depois de {target.title}
+        </button>
+        <button
+          type="button"
+          onClick={() => setDirection("before")}
+          className={`flex-1 rounded-full px-3 py-1.5 text-xs font-bold transition ${
+            direction === "before"
+              ? "bg-claude-accent text-claude-bg"
+              : "text-claude-text-muted hover:text-claude-text"
+          }`}
+        >
+          Toca antes de {target.title}
+        </button>
       </div>
 
       <button
@@ -266,7 +294,6 @@ export function TrackMatchesPanel({
                   </p>
                   <p className="truncate text-xs text-claude-text-muted">
                     {match.track.artist || "Artista não informado"}
-                    {match.direction === "backward" ? " · melhor entrando antes" : ""}
                   </p>
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-claude-text-faint">
                     <span>{match.track.bpm ? `${match.track.bpm} BPM` : "BPM —"}</span>
@@ -322,7 +349,7 @@ export function TrackMatchesPanel({
 
       <p className="mt-2 text-[11px] text-claude-text-faint">
         Sem contexto de narrativa/momento no set — considera harmonia, energia,
-        BPM, mood e diversidade. Direção mostrada é a que rende o maior score.
+        BPM, mood e diversidade.
       </p>
     </div>
   );
