@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { makeTrackKey } from "@/lib/mixbrain/track-identity";
 
 type ImportRow = {
   title: string;
@@ -38,28 +39,6 @@ const CANDIDATE_SUB_CHUNK_SIZE = 40;
 
 function normalizeText(value: string) {
   return value.trim().replace(/\s+/g, " ");
-}
-
-// Normalização SÓ para fins de comparação de identidade (nunca altera o
-// título/artista exibido ou gravado): remove ruído puro de formatação —
-// aspas curvas viradas em retas, acentuação, hífens/travessões variantes,
-// espaços duplicados, maiúsculas — para que "Café del Mar" e "Cafe Del Mar"
-// (mesma track, digitada diferente) sejam reconhecidas como a mesma. Isso
-// NÃO remove sufixos como "(Extended Mix)" ou "(Radio Edit)": remixes e
-// edits são tracks distintas de verdade e devem continuar separados. É
-// puramente sobre ruído de digitação/exportação, não sobre semântica.
-function normalizeForMatching(value: string) {
-  return normalizeText(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // remove acentos (café -> cafe)
-    .replace(/[\u2018\u2019\u02bc]/g, "'") // aspas simples curvas -> reta
-    .replace(/[\u201c\u201d]/g, '"') // aspas duplas curvas -> reta
-    .replace(/[\u2013\u2014]/g, "-") // en/em dash -> hífen normal
-    .toLocaleLowerCase("pt-BR");
-}
-
-function makeTrackKey(title: string, artist: string) {
-  return `${normalizeForMatching(title)}::${normalizeForMatching(artist)}`;
 }
 
 // Defesa em profundidade: o cliente já normaliza BPM/energia, mas

@@ -1,3 +1,5 @@
+import { makeTrackKey } from "./track-identity";
+
 export type ScoreTrack = {
   id: string;
   title: string;
@@ -781,9 +783,16 @@ export function rankTrackMatches(
   direction: MatchDirection = "after"
 ): TrackMatch[] {
   const results: TrackMatch[] = [];
+  const targetKey = makeTrackKey(target.title, target.artist ?? "");
 
   for (const candidate of pool) {
+    // Duas camadas de exclusão: por id (a própria linha) e por identidade
+    // normalizada (título+artista, mesma lógica usada pra dedup no import
+    // de CSV) — cobre o caso de uma "gêmea" quase idêntica, digitada
+    // diferente ou reimportada, aparecer como "melhor match" de si mesma
+    // mesmo tendo um id diferente no banco.
     if (candidate.id === target.id) continue;
+    if (makeTrackKey(candidate.title, candidate.artist ?? "") === targetKey) continue;
 
     const score =
       direction === "after"
