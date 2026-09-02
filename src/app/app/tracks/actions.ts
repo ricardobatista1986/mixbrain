@@ -12,7 +12,21 @@ type ParsedTrackInput = {
   mood: string | null;
   source: string | null;
   notes: string | null;
+  danceability: number | null;
+  valence: number | null;
+  instrumentalness: number | null;
+  speechiness: number | null;
+  acousticness: number | null;
 };
+
+function parseUnitInterval(raw: FormDataEntryValue | null, fieldLabel: string): number | null {
+  if (typeof raw !== "string" || raw.trim() === "") return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error(`${fieldLabel} deve ser um número entre 0 e 1.`);
+  }
+  return value;
+}
 
 function parseTrackFormData(formData: FormData): ParsedTrackInput {
   const rawTitle = formData.get("title");
@@ -69,6 +83,11 @@ function parseTrackFormData(formData: FormData): ParsedTrackInput {
     mood: mood || null,
     source: source || null,
     notes: notes || null,
+    danceability: parseUnitInterval(formData.get("danceability"), "Danceability"),
+    valence: parseUnitInterval(formData.get("valence"), "Valence"),
+    instrumentalness: parseUnitInterval(formData.get("instrumentalness"), "Instrumentalness"),
+    speechiness: parseUnitInterval(formData.get("speechiness"), "Speechiness"),
+    acousticness: parseUnitInterval(formData.get("acousticness"), "Acousticness"),
   };
 }
 
@@ -94,6 +113,11 @@ export async function createTrack(formData: FormData) {
     mood: parsed.mood,
     source: parsed.source,
     notes: parsed.notes,
+    danceability: parsed.danceability,
+    valence: parsed.valence,
+    instrumentalness: parsed.instrumentalness,
+    speechiness: parsed.speechiness,
+    acousticness: parsed.acousticness,
   });
 
   if (error) {
@@ -130,6 +154,11 @@ export async function updateTrack(trackId: string, formData: FormData) {
       mood: parsed.mood,
       source: parsed.source,
       notes: parsed.notes,
+      danceability: parsed.danceability,
+      valence: parsed.valence,
+      instrumentalness: parsed.instrumentalness,
+      speechiness: parsed.speechiness,
+      acousticness: parsed.acousticness,
     })
     .eq("id", trackId)
     .eq("user_id", claims.sub);

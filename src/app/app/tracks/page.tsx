@@ -19,7 +19,7 @@ export default async function TracksPage() {
   const { data: tracks, error } = await supabase
     .from("tracks")
     .select(
-      "id, title, artist, bpm, musical_key, energy, mood, source, notes, created_at",
+      "id, title, artist, bpm, musical_key, energy, mood, danceability, valence, instrumentalness, speechiness, acousticness, source, notes, created_at",
     )
     .order("created_at", { ascending: false });
 

@@ -12,6 +12,11 @@ export type LibraryTrack = {
   musical_key: string | null;
   energy: number | null;
   mood: string | null;
+  danceability: number | null;
+  valence: number | null;
+  instrumentalness: number | null;
+  speechiness: number | null;
+  acousticness: number | null;
   source: string | null;
   notes: string | null;
   created_at?: string;
@@ -150,6 +155,43 @@ function TrackEditForm({
           className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
         />
       </label>
+
+      <details className="rounded-lg border border-claude-border bg-claude-surface px-3 py-2">
+        <summary className="cursor-pointer text-xs font-semibold text-claude-text-muted hover:text-claude-text">
+          Features de áudio (danceability, valence, instrumentalness, speechiness, acousticness)
+        </summary>
+        <p className="mt-2 text-[11px] text-claude-text-faint">
+          Escala 0 a 1 (padrão Spotify). Normalmente vêm do CSV — preencha manualmente só se
+          souber os valores. Alimentam os fatores &quot;Textura vocal&quot; e &quot;Groove e
+          clima&quot; do score.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {(
+            [
+              ["danceability", "Danceability"],
+              ["valence", "Valence"],
+              ["instrumentalness", "Instrumentalness"],
+              ["speechiness", "Speechiness"],
+              ["acousticness", "Acousticness"],
+            ] as const
+          ).map(([field, label]) => (
+            <label key={field} className="block">
+              <span className="mb-1 block text-xs font-medium text-claude-text-muted">
+                {label}
+              </span>
+              <input
+                type="number"
+                name={field}
+                min={0}
+                max={1}
+                step={0.01}
+                defaultValue={track[field] ?? ""}
+                className="w-full rounded-lg border border-claude-border bg-claude-surface-2 px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
+              />
+            </label>
+          ))}
+        </div>
+      </details>
 
       {errorMessage ? (
         <p role="alert" className="rounded-lg border border-rose-300/20 bg-rose-300/10 px-3 py-2 text-xs text-rose-200">

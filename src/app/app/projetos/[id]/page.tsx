@@ -69,6 +69,11 @@ type Track = {
   musical_key: string | null;
   energy: number | null;
   mood: string | null;
+  danceability: number | null;
+  valence: number | null;
+  instrumentalness: number | null;
+  speechiness: number | null;
+  acousticness: number | null;
 };
 
 type BlockRef = {
@@ -573,7 +578,9 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
   const { data: allTracks } = await supabase
     .from("tracks")
-    .select("id, title, artist, bpm, musical_key, energy, mood")
+    .select(
+      "id, title, artist, bpm, musical_key, energy, mood, danceability, valence, instrumentalness, speechiness, acousticness"
+    )
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
@@ -592,6 +599,11 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
         musical_key,
         energy,
         mood,
+        danceability,
+        valence,
+        instrumentalness,
+        speechiness,
+        acousticness,
         source,
         notes
       )
@@ -617,7 +629,12 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
         bpm,
         musical_key,
         energy,
-        mood
+        mood,
+        danceability,
+        valence,
+        instrumentalness,
+        speechiness,
+        acousticness
       )
     `)
     .eq("project_id", id)

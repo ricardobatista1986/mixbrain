@@ -32,42 +32,26 @@ const FACTOR_META: Record<
     color: string;
   }
 > = {
-  narrative: {
-    title: "Narrativa",
-    description:
-      "Verifica se a transição contribui para a história aprovada do set: abertura, construção, vale, pico, contemplação ou encerramento.",
-    example:
-      "Uma track mais hipnótica e escura pode fazer sentido antes de uma expansão de groove, mesmo que não tenha a maior energia.",
-    color: "border-claude-accent/30 bg-claude-accent/10 text-claude-accent-hover",
-  },
-  timing: {
-    title: "Momento da track",
-    description:
-      "Avalia se a faixa está entrando no instante certo. Uma excelente track pode ser ruim se aparecer cedo, tarde ou no bloco emocional errado.",
-    example:
-      "Uma track de peak-time pode receber score baixo no início, mas score alto depois de uma construção longa.",
-    color: "border-sky-300/30 bg-sky-300/10 text-sky-100",
-  },
   harmony: {
     title: "Harmonia",
     description:
       "Usa key musical e Camelot para estimar compatibilidade tonal entre duas tracks. É um sinal importante, mas não manda sozinho na ordem.",
     example:
-      "10B para 9A é uma relação próxima; ainda assim, uma transição pode ser rejeitada se quebrar a narrativa.",
+      "10B para 9A é uma relação próxima — uma das transições mais seguras do Camelot Wheel.",
     color: "border-violet-300/30 bg-violet-300/10 text-violet-100",
   },
   energy: {
     title: "Energia",
     description:
-      "Compara energia geral e dimensões como tensão, intensidade de pista, groove e agressividade para evitar saltos sem intenção.",
+      "Compara o nível de energia (1-10) entre as duas tracks para evitar saltos sem intenção.",
     example:
-      "Uma queda de energia pode ser correta quando o briefing pede um vale ou momento de respiro.",
+      "Diferença de 1 nível recebe score alto; um salto de 4+ níveis pede atenção — pode ser deliberado, mas vale conferir.",
     color: "border-fuchsia-300/30 bg-fuchsia-300/10 text-fuchsia-100",
   },
   mood: {
     title: "Textura e mood",
     description:
-      "Compara atmosfera, densidade, hipnose, brilho, escuridão, emoção, melodia e vocal para evitar mudanças bruscas de paleta sonora.",
+      "Compara as tags de mood declaradas nas duas tracks (texto livre) para evitar mudanças bruscas de paleta sonora.",
     example:
       "Duas tracks com BPM e key semelhantes podem precisar de uma bridge se uma é introspectiva e a próxima é muito expansiva.",
     color: "border-amber-300/30 bg-amber-300/10 text-amber-100",
@@ -77,27 +61,43 @@ const FACTOR_META: Record<
     description:
       "Mede a diferença percentual de BPM. O valor pode ser menor em importância porque a mudança de BPM pode ser deliberada e mixável (inclusive relações de metade/dobro de tempo, tratadas como compatíveis).",
     example:
-      "122 para 122 recebe compatibilidade alta; uma variação maior pode ser aceita quando a curva de tempo aprovada pede aceleração.",
+      "122 para 122 recebe compatibilidade alta; uma variação maior pode ser aceita quando a mudança de tempo é deliberada.",
     color: "border-lime-300/30 bg-lime-300/10 text-lime-100",
   },
   diversity: {
     title: "Diversidade",
     description:
-      "Reduz o risco de repetição excessiva de um mesmo artista ou key numa janela recente, mas não impede repetições intencionais.",
+      "Reduz o risco de repetição excessiva de um mesmo artista em sequência, mas não impede repetições intencionais.",
     example:
-      "Uma segunda track do mesmo artista pode entrar se for indispensável para a narrativa ou funcionar como bridge.",
+      "Uma segunda track do mesmo artista pode entrar se for indispensável ou funcionar como bridge.",
     color: "border-emerald-300/30 bg-emerald-300/10 text-emerald-100",
+  },
+  vocal_texture: {
+    title: "Textura vocal",
+    description:
+      "Combina instrumentalness e speechiness (dados do Spotify) para comparar presença vocal entre as duas tracks — evita colidir uma track muito falada/cantada com uma puramente instrumental.",
+    example:
+      "Um instrumental puro seguido de uma track com vocal denso pode soar como um contraste brusco, mesmo com harmonia e BPM perfeitos.",
+    color: "border-rose-300/30 bg-rose-300/10 text-rose-100",
+  },
+  groove_mood: {
+    title: "Groove e clima",
+    description:
+      "Combina danceability e valence (dados do Spotify) para comparar dançabilidade e positividade musical entre as duas tracks — um sinal quantitativo que complementa o mood em texto livre.",
+    example:
+      "Duas tracks com o mesmo BPM podem ter groove bem diferente — uma mais dançante e eufórica, outra mais introspectiva.",
+    color: "border-cyan-300/30 bg-cyan-300/10 text-cyan-100",
   },
 };
 
 const FACTOR_ORDER: (keyof typeof DEFAULT_SCORING_WEIGHTS)[] = [
-  "narrative",
-  "timing",
   "harmony",
   "energy",
   "mood",
   "bpm",
   "diversity",
+  "vocal_texture",
+  "groove_mood",
 ];
 
 const dimensions = [

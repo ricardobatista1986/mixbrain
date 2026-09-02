@@ -1384,13 +1384,13 @@ export async function updateTargetEnergyCurve(formData: FormData) {
 }
 
 const SCORING_FACTOR_KEYS = [
-  "narrative",
-  "timing",
   "harmony",
   "energy",
   "mood",
   "bpm",
   "diversity",
+  "vocal_texture",
+  "groove_mood",
 ] as const;
 
 export async function updateScoringWeights(formData: FormData) {

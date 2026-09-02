@@ -6,13 +6,13 @@ import { updateScoringWeights } from "@/app/app/projetos/[id]/actions";
 import { DEFAULT_SCORING_WEIGHTS } from "@/lib/mixbrain/transition-score";
 
 const FACTOR_LABELS: { key: keyof typeof DEFAULT_SCORING_WEIGHTS; label: string }[] = [
-  { key: "narrative", label: "Narrativa" },
-  { key: "timing", label: "Momento da track" },
   { key: "harmony", label: "Harmonia" },
   { key: "energy", label: "Energia" },
   { key: "mood", label: "Textura e mood" },
   { key: "bpm", label: "BPM" },
   { key: "diversity", label: "Diversidade" },
+  { key: "vocal_texture", label: "Textura vocal" },
+  { key: "groove_mood", label: "Groove e clima" },
 ];
 
 type WeightPreset = {
@@ -32,20 +32,20 @@ const WEIGHT_PRESETS: WeightPreset[] = [
   {
     id: "peak-time",
     label: "Peak time",
-    description: "Pista cheia, sem tempo pra respirar: energia e BPM no comando, narrativa em segundo plano.",
-    weights: { narrative: 12, timing: 14, harmony: 20, energy: 24, mood: 6, bpm: 20, diversity: 4 },
+    description: "Pista cheia, sem tempo pra respirar: energia e BPM no comando.",
+    weights: { harmony: 22, energy: 26, mood: 8, bpm: 22, diversity: 6, vocal_texture: 8, groove_mood: 8 },
   },
   {
     id: "fuzzy",
     label: "Fuzzy (seguro)",
     description: "Prioriza compatibilidade harmônica acima de tudo — transições que nunca soam fora de tom.",
-    weights: { narrative: 8, timing: 6, harmony: 42, energy: 14, mood: 10, bpm: 18, diversity: 2 },
+    weights: { harmony: 42, energy: 14, mood: 10, bpm: 18, diversity: 2, vocal_texture: 7, groove_mood: 7 },
   },
   {
     id: "deep",
     label: "Deep / hipnótico",
-    description: "Sets longos e lentos: textura e narrativa importam mais que picos de energia.",
-    weights: { narrative: 20, timing: 14, harmony: 20, energy: 6, mood: 26, bpm: 12, diversity: 2 },
+    description: "Sets longos e lentos: textura, groove e continuidade vocal importam mais que picos de energia.",
+    weights: { harmony: 24, energy: 4, mood: 30, bpm: 10, diversity: 2, vocal_texture: 14, groove_mood: 16 },
   },
 ];
 

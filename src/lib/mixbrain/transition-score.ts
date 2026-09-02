@@ -8,6 +8,12 @@ export type ScoreTrack = {
   musical_key: string | null;
   energy: number | null;
   mood: string | null;
+  /** Escala 0-1, padrão Spotify. Todos opcionais — nem toda fonte traz esses dados. */
+  danceability?: number | null;
+  valence?: number | null;
+  instrumentalness?: number | null;
+  speechiness?: number | null;
+  acousticness?: number | null;
 };
 
 export type CuratorialMoment =
@@ -31,13 +37,13 @@ export type ScoreFactorStatus = "available" | "missing" | "pending";
 
 export type ScoreFactor = {
   id:
-    | "narrative"
-    | "timing"
     | "harmony"
     | "energy"
     | "mood"
     | "bpm"
-    | "diversity";
+    | "diversity"
+    | "vocal_texture"
+    | "groove_mood";
   title: string;
   officialWeight: number;
   effectiveWeight: number;
@@ -384,191 +390,152 @@ function getDiversityFactor(currentTrack: ScoreTrack, nextTrack: ScoreTrack): Sc
   };
 }
 
-function getMomentLabel(moment: CuratorialMoment) {
-  const labels: Record<CuratorialMoment, string> = {
-    opening: "abertura",
-    build: "construção",
-    valley: "vale",
-    peak: "pico",
-    contemplation: "contemplação",
-    closing: "encerramento",
-  };
+function getVocalTextureFactor(currentTrack: ScoreTrack, nextTrack: ScoreTrack): ScoreFactor {
+  const currentInstrumentalness = currentTrack.instrumentalness;
+  const nextInstrumentalness = nextTrack.instrumentalness;
+  const currentSpeechiness = currentTrack.speechiness;
+  const nextSpeechiness = nextTrack.speechiness;
 
-  return labels[moment];
-}
-
-function getNarrativeFactor(
-  currentContext: ScoreTracklistItemContext | null | undefined,
-  nextContext: ScoreTracklistItemContext | null | undefined
-): ScoreFactor {
-  const currentMoment = currentContext?.curatorial_moment ?? null;
-  const nextMoment = nextContext?.curatorial_moment ?? null;
-
-  if (!currentMoment || !nextMoment) {
+  if (
+    currentInstrumentalness == null ||
+    nextInstrumentalness == null ||
+    currentSpeechiness == null ||
+    nextSpeechiness == null
+  ) {
     return {
-      id: "narrative",
-      title: "Narrativa",
-      officialWeight: 28,
+      id: "vocal_texture",
+      title: "Textura vocal",
+      officialWeight: 8,
       effectiveWeight: 0,
       score: null,
       status: "missing",
       explanation:
-        "Sem momento curatorial nas duas tracks. Narrativa ainda não entrou no cálculo.",
+        "Sem instrumentalness/speechiness nas duas tracks. Textura vocal não entrou no cálculo.",
     };
   }
 
-  const narrativeScores: Record<
-    CuratorialMoment,
-    Partial<Record<CuratorialMoment, number>>
-  > = {
-    opening: {
-      opening: 88,
-      build: 96,
-      valley: 55,
-      contemplation: 68,
-      peak: 30,
-      closing: 20,
-    },
-    build: {
-      opening: 35,
-      build: 86,
-      valley: 62,
-      contemplation: 58,
-      peak: 95,
-      closing: 28,
-    },
-    valley: {
-      opening: 42,
-      build: 84,
-      valley: 80,
-      contemplation: 90,
-      peak: 52,
-      closing: 40,
-    },
-    peak: {
-      opening: 18,
-      build: 40,
-      valley: 82,
-      contemplation: 72,
-      peak: 78,
-      closing: 60,
-    },
-    contemplation: {
-      opening: 40,
-      build: 74,
-      valley: 88,
-      contemplation: 84,
-      peak: 46,
-      closing: 92,
-    },
-    closing: {
-      opening: 12,
-      build: 18,
-      valley: 40,
-      contemplation: 62,
-      peak: 22,
-      closing: 96,
-    },
-  };
+  // Presença vocal combinada: instrumentalness alto = sem vocal (então
+  // 1 - instrumentalness mede "tem vocal"); speechiness alto = muita fala
+  // (rap, spoken word). Média das duas captura os dois jeitos de uma
+  // track ser "vocal-forward".
+  const currentVocalPresence = (1 - currentInstrumentalness + currentSpeechiness) / 2;
+  const nextVocalPresence = (1 - nextInstrumentalness + nextSpeechiness) / 2;
+  const difference = Math.abs(currentVocalPresence - nextVocalPresence);
 
-  const score = narrativeScores[currentMoment][nextMoment] ?? 40;
+  let score = 25;
+  let explanation =
+    "Contraste forte de presença vocal (ex.: instrumental puro para vocal denso).";
+
+  if (difference < 0.15) {
+    score = 100;
+    explanation = "Textura vocal muito parecida entre as duas tracks.";
+  } else if (difference < 0.3) {
+    score = 85;
+    explanation = "Textura vocal parecida.";
+  } else if (difference < 0.5) {
+    score = 65;
+    explanation = "Alguma diferença de presença vocal.";
+  } else if (difference < 0.7) {
+    score = 45;
+    explanation = "Diferença perceptível de presença vocal.";
+  }
 
   return {
-    id: "narrative",
-    title: "Narrativa",
-    officialWeight: 28,
-    effectiveWeight: 28,
+    id: "vocal_texture",
+    title: "Textura vocal",
+    officialWeight: 8,
+    effectiveWeight: 8,
     score,
     status: "available",
-    explanation: `Transição de ${getMomentLabel(currentMoment)} para ${getMomentLabel(nextMoment)}.`,
+    explanation,
   };
 }
 
-function getTimingFactor(
-  currentContext: ScoreTracklistItemContext | null | undefined,
-  nextContext: ScoreTracklistItemContext | null | undefined
-): ScoreFactor {
-  const currentMoment = currentContext?.curatorial_moment ?? null;
-  const nextMoment = nextContext?.curatorial_moment ?? null;
+function getGrooveMoodFactor(currentTrack: ScoreTrack, nextTrack: ScoreTrack): ScoreFactor {
+  const currentDanceability = currentTrack.danceability;
+  const nextDanceability = nextTrack.danceability;
+  const currentValence = currentTrack.valence;
+  const nextValence = nextTrack.valence;
 
-  if (!currentMoment || !nextMoment) {
+  if (
+    currentDanceability == null ||
+    nextDanceability == null ||
+    currentValence == null ||
+    nextValence == null
+  ) {
     return {
-      id: "timing",
-      title: "Momento da track",
-      officialWeight: 22,
+      id: "groove_mood",
+      title: "Groove e clima",
+      officialWeight: 8,
       effectiveWeight: 0,
       score: null,
       status: "missing",
       explanation:
-        "Sem momento curatorial nas duas tracks. O momento da track ainda não entrou no cálculo.",
+        "Sem danceability/valence nas duas tracks. Groove e clima não entrou no cálculo.",
     };
   }
 
-  if (currentMoment === nextMoment) {
-    return {
-      id: "timing",
-      title: "Momento da track",
-      officialWeight: 22,
-      effectiveWeight: 22,
-      score: 88,
-      status: "available",
-      explanation: "As duas tracks ocupam o mesmo momento curatorial.",
-    };
-  }
+  // Duas dimensões independentes do Spotify: danceability (o quanto a
+  // faixa convida a dançar) e valence (positividade musical — feliz/
+  // eufórico vs triste/sombrio). Média das diferenças absolutas nas duas
+  // dimensões, não só uma média simples dos valores — capta tanto "groove
+  // muito diferente" quanto "clima emocional muito diferente" mesmo
+  // quando só uma das duas diverge.
+  const difference =
+    (Math.abs(currentDanceability - nextDanceability) + Math.abs(currentValence - nextValence)) /
+    2;
 
-  const strongPairs = new Set([
-    "opening:build",
-    "build:peak",
-    "peak:valley",
-    "valley:contemplation",
-    "contemplation:closing",
-    "valley:build",
-    "build:valley",
-    "peak:contemplation",
-  ]);
+  let score = 25;
+  let explanation = "Contraste forte de groove/clima entre as duas tracks.";
 
-  const pair = `${currentMoment}:${nextMoment}`;
-
-  if (strongPairs.has(pair)) {
-    return {
-      id: "timing",
-      title: "Momento da track",
-      officialWeight: 22,
-      effectiveWeight: 22,
-      score: 92,
-      status: "available",
-      explanation: `Boa relação de momento: ${getMomentLabel(currentMoment)} para ${getMomentLabel(nextMoment)}.`,
-    };
+  if (difference < 0.1) {
+    score = 100;
+    explanation = "Groove e clima muito parecidos.";
+  } else if (difference < 0.2) {
+    score = 85;
+    explanation = "Groove e clima parecidos.";
+  } else if (difference < 0.35) {
+    score = 65;
+    explanation = "Alguma diferença de groove ou clima.";
+  } else if (difference < 0.5) {
+    score = 45;
+    explanation = "Diferença perceptível de groove ou clima.";
   }
 
   return {
-    id: "timing",
-    title: "Momento da track",
-    officialWeight: 22,
-    effectiveWeight: 22,
-    score: 52,
+    id: "groove_mood",
+    title: "Groove e clima",
+    officialWeight: 8,
+    effectiveWeight: 8,
+    score,
     status: "available",
-    explanation: `Mudança de momento menos previsível: ${getMomentLabel(currentMoment)} para ${getMomentLabel(nextMoment)}.`,
+    explanation,
   };
 }
+
 
 export type ScoringWeights = Partial<Record<ScoreFactor["id"], number>>;
 
 export const DEFAULT_SCORING_WEIGHTS: Record<ScoreFactor["id"], number> = {
-  narrative: 0,
-  timing: 0,
-  harmony: 32,
-  energy: 26,
-  mood: 18,
-  bpm: 14,
-  diversity: 10,
+  harmony: 28,
+  energy: 22,
+  mood: 14,
+  bpm: 12,
+  diversity: 8,
+  vocal_texture: 8,
+  groove_mood: 8,
 };
 
 /**
  * Normaliza o JSON salvo em set_projects.scoring_weights para as chaves
  * usadas pelo motor de score. O default histórico da tabela usa "moment" e
- * "texture" (nomes do plano original do produto); o código usa "timing" e
- * "mood" (nomes dos fatores implementados). Aceita as duas grafias.
+ * "texture" (nomes do plano original do produto); o código usa "mood"
+ * (nome do fator implementado). Aceita as duas grafias.
+ *
+ * "narrative" e "timing" (dependiam de marcar momento curatorial em cada
+ * track manualmente) foram removidos do modelo — não são mais chaves
+ * válidas. Projetos com peso salvo de antes dessa mudança podem ainda ter
+ * essas chaves no JSON; são simplesmente ignoradas aqui, sem erro.
  */
 export function normalizeScoringWeights(raw: unknown): ScoringWeights | undefined {
   if (!raw || typeof raw !== "object") return undefined;
@@ -585,21 +552,21 @@ export function normalizeScoringWeights(raw: unknown): ScoringWeights | undefine
   };
 
   const weights: ScoringWeights = {};
-  const narrative = pick("narrative");
-  const timing = pick("timing", "moment");
   const harmony = pick("harmony");
   const energy = pick("energy");
   const mood = pick("mood", "texture");
   const bpm = pick("bpm");
   const diversity = pick("diversity");
+  const vocalTexture = pick("vocal_texture");
+  const grooveMood = pick("groove_mood");
 
-  if (narrative !== undefined) weights.narrative = narrative;
-  if (timing !== undefined) weights.timing = timing;
   if (harmony !== undefined) weights.harmony = harmony;
   if (energy !== undefined) weights.energy = energy;
   if (mood !== undefined) weights.mood = mood;
   if (bpm !== undefined) weights.bpm = bpm;
   if (diversity !== undefined) weights.diversity = diversity;
+  if (vocalTexture !== undefined) weights.vocal_texture = vocalTexture;
+  if (grooveMood !== undefined) weights.groove_mood = grooveMood;
 
   return Object.keys(weights).length > 0 ? weights : undefined;
 }
@@ -607,6 +574,12 @@ export function normalizeScoringWeights(raw: unknown): ScoringWeights | undefine
 export function calculateTransitionScore(
   currentTrack: ScoreTrack | null | undefined,
   nextTrack: ScoreTrack | null | undefined,
+  // currentContext/nextContext ficam no assinatura por compatibilidade com
+  // todos os call sites existentes (dezenas, na página do projeto e nos
+  // componentes de matches) — eram usados só por narrativa/timing, que
+  // foram removidos do modelo (marcar momento curatorial em cada track era
+  // manual demais para valer a pena manter como fator de score). Passar
+  // contexto continua sendo seguro, só não tem mais efeito no cálculo.
   currentContext?: ScoreTracklistItemContext | null,
   nextContext?: ScoreTracklistItemContext | null,
   customWeights?: ScoringWeights
@@ -615,14 +588,17 @@ export function calculateTransitionScore(
     return null;
   }
 
+  void currentContext;
+  void nextContext;
+
   const rawFactors: ScoreFactor[] = [
-    getNarrativeFactor(currentContext, nextContext),
-    getTimingFactor(currentContext, nextContext),
     getHarmonyFactor(currentTrack, nextTrack),
     getEnergyFactor(currentTrack, nextTrack),
     getMoodFactor(currentTrack, nextTrack),
     getBpmFactor(currentTrack, nextTrack),
     getDiversityFactor(currentTrack, nextTrack),
+    getVocalTextureFactor(currentTrack, nextTrack),
+    getGrooveMoodFactor(currentTrack, nextTrack),
   ];
 
   // Peso efetivo de cada fator: DEFAULT_SCORING_WEIGHTS é a única fonte de

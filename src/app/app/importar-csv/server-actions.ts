@@ -12,6 +12,11 @@ type ImportRow = {
   energy: number | null;
   mood: string | null;
   notes: string | null;
+  valence: number | null;
+  danceability: number | null;
+  acousticness: number | null;
+  instrumentalness: number | null;
+  speechiness: number | null;
 };
 
 type LibraryTrack = {
@@ -55,6 +60,18 @@ function sanitizeEnergy(value: number | null): number | null {
 
 function sanitizeBpm(value: number | null): number | null {
   if (value === null || !Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+// Features de áudio no estilo Spotify (valence, danceability, acousticness,
+// instrumentalness, speechiness) já chegam normalizadas em 0-1 vindas do
+// buildParsedRows no client (que já detecta e converte escala 0-100 quando
+// aplicável). Isso aqui é defesa em profundidade — mesma lógica de
+// sanitizeEnergy/sanitizeBpm, garante que um valor fora do intervalo nunca
+// entra no banco mesmo se o client mandar algo inesperado.
+function sanitizeUnitInterval(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) return null;
+  if (value < 0 || value > 1) return null;
   return value;
 }
 
@@ -211,6 +228,11 @@ export async function importTracksFromCsv(
               energy: sanitizeEnergy(row.energy),
               mood: row.mood,
               notes: row.notes,
+              valence: sanitizeUnitInterval(row.valence),
+              danceability: sanitizeUnitInterval(row.danceability),
+              acousticness: sanitizeUnitInterval(row.acousticness),
+              instrumentalness: sanitizeUnitInterval(row.instrumentalness),
+              speechiness: sanitizeUnitInterval(row.speechiness),
             })),
           }
         );

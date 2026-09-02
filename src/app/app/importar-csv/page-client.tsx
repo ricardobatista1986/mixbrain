@@ -16,6 +16,11 @@ type ParsedRow = {
   energy: number | null;
   mood: string | null;
   notes: string | null;
+  valence: number | null;
+  danceability: number | null;
+  acousticness: number | null;
+  instrumentalness: number | null;
+  speechiness: number | null;
 };
 
 type MappingState = {
@@ -334,21 +339,26 @@ function buildParsedRows(
       const energyValue = energyRaw ? normalizeEnergy(energyRaw, energyScale) : null;
 
       let mood = toNullableString(rawMood);
+      let valence: number | null = null;
+      let danceability: number | null = null;
+      let acousticness: number | null = null;
+      let instrumentalness: number | null = null;
+      let speechiness: number | null = null;
 
       if (hasFeatureColumns) {
-        const valence = mapping.valence
+        valence = mapping.valence
           ? normalize01(String(row[mapping.valence] ?? ""), valenceScale)
           : null;
-        const danceability = mapping.danceability
+        danceability = mapping.danceability
           ? normalize01(String(row[mapping.danceability] ?? ""), danceScale)
           : null;
-        const acousticness = mapping.acousticness
+        acousticness = mapping.acousticness
           ? normalize01(String(row[mapping.acousticness] ?? ""), acousticScale)
           : null;
-        const instrumentalness = mapping.instrumentalness
+        instrumentalness = mapping.instrumentalness
           ? normalize01(String(row[mapping.instrumentalness] ?? ""), instrumentalScale)
           : null;
-        const speechiness = mapping.speechiness
+        speechiness = mapping.speechiness
           ? normalize01(String(row[mapping.speechiness] ?? ""), speechScale)
           : null;
 
@@ -374,6 +384,11 @@ function buildParsedRows(
         energy: energyValue,
         mood,
         notes: toNullableString(notes),
+        valence,
+        danceability,
+        acousticness,
+        instrumentalness,
+        speechiness,
       };
     })
     .filter((row): row is ParsedRow => row !== null);

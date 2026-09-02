@@ -158,6 +158,42 @@ export function CreateTrackForm() {
           />
         </label>
 
+        <details className="rounded-xl border border-claude-border bg-claude-bg px-4 py-3">
+          <summary className="cursor-pointer text-sm font-semibold text-claude-text-muted hover:text-claude-text">
+            Features de áudio (avançado)
+          </summary>
+          <p className="mt-2 text-xs text-claude-text-faint">
+            Escala 0 a 1 (padrão Spotify). Normalmente vêm do CSV — preencha manualmente só se
+            souber os valores. Alimentam os fatores &quot;Textura vocal&quot; e &quot;Groove e
+            clima&quot; do score.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {(
+              [
+                ["danceability", "Danceability"],
+                ["valence", "Valence"],
+                ["instrumentalness", "Instrumentalness"],
+                ["speechiness", "Speechiness"],
+                ["acousticness", "Acousticness"],
+              ] as const
+            ).map(([field, label]) => (
+              <label key={field} className="block">
+                <span className="mb-1 block text-xs font-medium text-claude-text-muted">
+                  {label}
+                </span>
+                <input
+                  type="number"
+                  name={field}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  className="w-full rounded-lg border border-claude-border bg-claude-surface px-3 py-2 text-sm text-claude-text outline-none focus:border-claude-accent"
+                />
+              </label>
+            ))}
+          </div>
+        </details>
+
         {errorMessage ? (
           <p
             role="alert"
